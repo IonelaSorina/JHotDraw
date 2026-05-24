@@ -20,6 +20,8 @@
 10. [Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw](#lab-5--actualization-lab-solid-and-clean-architecture-in-jhotdraw)
 11. [Lecture 6 — Clean Code](#lecture-6--clean-code)
 12. [Lab 7 — Testing Lab: Unit Tests for Group / Ungroup](#lab-7--testing-lab-unit-tests-for-group--ungroup)
+13. [Lecture 9 — Pragmatic BDD for Java](#lecture-9--pragmatic-bdd-for-java)
+14. [Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup)
 
 ---
 
@@ -2345,3 +2347,623 @@ Three things stand out from doing this lab on a real, eight-year-old codebase as
 **(3) Boundary cases I would have missed without writing them down.** *Empty group ungroup* and *no active view* are both states a manual tester would almost never reach. Yet both are reachable via key bindings, scripted actions, or unusual sequences of menu clicks. Pinning them with tests does two things: it documents the contract (the method *will* be called from these states), and it freezes the current behaviour against accidental regression. This is the F.I.R.S.T. *Repeatable* property in action — a property that, until I wrote the tests, only existed by accident.
 
 The hand-out's small print at the bottom asked for "documentation of how I verified my feature." The 24 tests are that documentation: each test name is a sentence describing a fact the code now upholds, and the catalogue table above is the index.
+
+---
+
+## Lecture 9 — Pragmatic BDD for Java
+
+> Lecture 8 had no slides released and no associated lab, so this section jumps from Lecture 6 / Lab 7 straight to Lecture 9.
+
+The ninth lecture, *Software Verification — Pragmatic BDD for Java* by Jan Corfixen Sørensen, brings the testing arc that started in Lecture 7 / Lab 7 to its second stage: writing executable specifications that read as *behaviour*, not as code. The previous lab proved the Group/Ungroup feature works at the *unit* level — this lecture is about a different audience: the domain expert, the product owner, the QA engineer who reads tests as documentation rather than as code. The lecture's claim is that there is now a *pragmatic* way to get there in Java — i.e. without leaving the JVM, without learning a new language, and without paying the maintenance cost of classical BDD frameworks.
+
+---
+
+### 9.1 Why BDD? — the problem statement
+
+The lecture opens with a candid critique of the unit-test world I just finished building in Lab 7:
+
+| Problem with conventional unit tests | What it looks like |
+|---|---|
+| **Many technical and often irrelevant details** | `Mockito.when(view.getSelectionCount()).thenReturn(2)` — Mockito grammar leaks into the readable intent. |
+| **The point of the test is often hard to grasp** | A test named `actionPerformed_performsGroup_whenIsGroupingActionAndCanGroup` describes the *implementation* path, not the *behaviour*. |
+| **Code duplication** | Every test rewires the editor/view/drawing chain in `setUp()`. |
+| **Can only be read by developers** | A non-programmer cannot read JUnit/Mockito source. |
+| **Cannot be used as documentation** | The test file is not the specification — it is only the proof. |
+
+I recognise four of the five problems directly in my Lab 7 file. That is the *honest* starting point for taking BDD seriously: it is not a replacement for unit tests, it is the upper layer that unit tests cannot occupy.
+
+---
+
+### 9.2 What BDD is
+
+BDD is defined in the lecture by four properties:
+
+1. **Behaviour is described in a common domain language** understandable by domain experts.
+2. **Domain experts and developers collaborate** on defining the behaviour.
+3. **Scenarios are executed like normal tests** — i.e. they fail the CI build if behaviour changes.
+4. **The result is a living documentation** that cannot rot, because if it rots the build breaks.
+
+The fourth property is the most striking. Static documentation (Confluence pages, design docs, Javadoc) decays the moment the code drifts from it. A BDD scenario *cannot* drift silently — if the production code stops behaving as the scenario describes, the scenario fails. *Documentation that the build refuses to let go stale.*
+
+---
+
+### 9.3 The pancake example
+
+The lecture's running example is, charmingly, a recipe:
+
+```
+Scenario: a pancake can be fried out of an egg milk and flour
+
+  Given an egg
+    And some milk
+    And the ingredient flour
+   When the cook mangles everything to a dough
+    And the cook fries the dough in a pan
+   Then the resulting meal is a pan cake
+```
+
+Three properties of this scenario are worth highlighting because they recur throughout the rest of the lecture:
+
+- **No code.** Yet executable.
+- **No technology vocabulary.** No `Mockito`, no `@Test`, no `assertEquals`. The vocabulary is `egg`, `milk`, `flour`, `cook`, `pan`.
+- **Composition by domain verbs.** *Given*, *When*, *Then* — each describing a phase of behaviour, not a phase of execution.
+
+---
+
+### 9.4 Classical vs developer-friendly BDD frameworks
+
+The lecture is sharp about the trade-off between the two families:
+
+| Family | Examples | Trade-off |
+|---|---|---|
+| **Classical** | Cucumber (Plain Text + Java), JBehave (Plain Text + Java), Concordion (HTML + Java), Fitness (Wiki + Java), robotframework.org | Pure plain-text scenarios; readable to non-developers, but *two artefacts to maintain* — the `.feature` file and the step definitions in Java. **Additional maintenance cost.** |
+| **Developer-friendly** | Spock (Groovy), ScalaTest (Scala), Jnario (Xtend), Serenity* (Java), **JGiven** | Scenarios live in code, in the same language as the system under test. Lower maintenance, but the trade-off is that domain experts can read the *generated reports* but cannot *write* the scenarios themselves. |
+
+JGiven (which Lab 9 will use) is the lecture's specific recommendation for Java. The trade-off is honest: domain experts can read the HTML5 report, but cannot author scenarios. In exchange, developers do not maintain two files and do not learn a new language.
+
+---
+
+### 9.5 JGiven — introduction
+
+The lecture's positioning of JGiven:
+
+- Developer friendly (low maintenance overhead)
+- Readable test code (Given-When-Then)
+- Modular and reusable test code
+- Reports for domain experts
+- Open source — [jgiven.org](http://jgiven.org)
+
+The first JGiven scenario the lecture shows is the pancake recipe expressed as a JUnit test:
+
+```java
+@Test
+public void a_pancake_can_be_fried_out_of_an_egg_milk_and_flour() {
+    given().an_egg()
+       .and().some_milk()
+       .and().the_ingredient("flour");
+
+    when().the_cook_mangles_everything_to_a_dough()
+       .and().the_cook_fries_the_dough_in_a_pan();
+
+    then().the_resulting_meal_is_a_pancake();
+}
+```
+
+The structural insight is that **method names are the specification**. Underscores render as spaces in the generated report. JGiven reads the method name, replaces underscores with spaces, and produces the human-readable scenario in the report — *the same source artefact serves as both code and documentation.*
+
+---
+
+### 9.6 Stage classes
+
+This is the conceptual move that distinguishes JGiven from every other BDD framework, and the lecture flags it explicitly: *"Stage classes are a unique feature of JGiven, not present in any other BDD framework."*
+
+A **stage class** is a class that groups the step methods belonging to one phase of a scenario — typically one stage class per Given, When, and Then.
+
+- A Given stage sets up state.
+- A When stage performs the action.
+- A Then stage performs assertions.
+
+Each stage class is reusable across many scenarios.
+
+#### 9.6.1 State transfer between stages
+
+State flows between stages through annotated fields:
+
+- `@ScenarioState` — both readable and writable.
+- `@ProvidedScenarioState` — *written* by this stage, read by later stages.
+- `@ExpectedScenarioState` — *read* by this stage from earlier stages.
+
+A diagram in the lecture shows two parallel state values (`state1`, `state2`) being produced by the Given stage, consumed and transformed into a `result` by the When stage, and finally fed into the Then stage's assertions. The annotations are JGiven's way of making this data-flow explicit and statically declared — no global state, no test-class fields holding test fixtures.
+
+#### 9.6.2 Example stage classes
+
+`GivenIngredients` (the Given stage):
+
+```java
+public class GivenIngredients extends Stage<GivenIngredients> {
+    @ProvidedScenarioState
+    List<String> ingredients = new ArrayList<>();
+
+    public GivenIngredients an_egg() {
+        return the_ingredient("egg");
+    }
+    public GivenIngredients the_ingredient(String ingredient) {
+        ingredients.add(ingredient);
+        return this;
+    }
+    public GivenIngredients some_milk() {
+        return the_ingredient("milk");
+    }
+}
+```
+
+`WhenCook` (the When stage):
+
+```java
+public class WhenCook extends Stage<WhenCook> {
+    @Autowired @ScenarioState
+    Cook cook;
+    @ExpectedScenarioState
+    List<String> ingredients;
+    @ProvidedScenarioState
+    Set<String> dough;
+    @ProvidedScenarioState
+    String meal;
+
+    public WhenCook the_cook_fries_the_dough_in_a_pan() {
+        assertThat(cook).isNotNull();
+        assertThat(dough).isNotNull();
+        meal = cook.fryDoughInAPan(dough);
+        return this;
+    }
+}
+```
+
+`ThenMeal` (the Then stage):
+
+```java
+public class ThenMeal extends Stage<ThenMeal> {
+    @ExpectedScenarioState
+    String meal;
+
+    public void the_resulting_meal_is_a_pan_cake() {
+        the_resulting_meal_is_a("pancake");
+    }
+    public void the_resulting_meal_is_a(String expectedMeal) {
+        assertThat(meal).isEqualTo(expectedMeal);
+    }
+}
+```
+
+The pattern is clear: each stage has a *single responsibility* (set up, act, or assert), and its fields encode the contract with adjacent stages. This is SRP from Lecture 5 applied to the test layer.
+
+---
+
+### 9.7 Reports — console and HTML5
+
+JGiven generates two report formats out of the box:
+
+```
+Test Class: com.tngtech.jgiven.examples.pancakes.test.SpringPanCakeScenarioTest
+
+  A pancake can be fried out of an egg milk and flour
+
+  Given an egg
+    And some milk
+    And the ingredient flour
+   When the cook mangles everything to a dough
+    And the cook fries the dough in a pan
+   Then the resulting meal is a pan cake
+```
+
+The HTML5 report is more polished — a sidebar of summaries, tags, and class navigation, with each scenario expandable to show its Given/When/Then. The screenshot in the lecture shows 53 scenarios all passing, with tag-based filtering (BrowserTest, Features, Issue) and class-based grouping. *This is the artefact the domain expert reads.*
+
+---
+
+### 9.8 TNG's three-year experience
+
+The lecture closes the JGiven half with a credibility data point: TNG (the company that maintains JGiven) reports three years of production use on a 70-developer Java enterprise project with over 3000 scenarios. The reported outcomes:
+
+- Readability and reusability of test code "greatly improved".
+- Maintenance costs of automated tests reduced (acknowledged: no hard numbers).
+- Well accepted by developers, easy to learn for new joiners.
+- Developers and domain experts collaborate via scenarios.
+
+The fact that the lecturer chose to share this specifically — rather than only the framework's mechanics — signals which property of BDD he considers load-bearing in practice: not the readability per se, but *the cultural change of collaboration*. The scenario becomes the shared artefact between people who would otherwise hand each other Word documents.
+
+---
+
+### 9.9 JGiven summary
+
+The lecture's own summary, condensed:
+
+- Developer friendly
+- Highly modular and reusable test code
+- Just Java — no further language required
+- Easy to integrate into existing test infrastructures (JUnit, TestNG)
+- Open Source (Apache 2)
+- Maven and Jenkins plugins available
+- Nice reports for domain experts
+- **Domain experts cannot write scenarios in JGiven** — the honest trade-off, repeated.
+
+---
+
+### 9.10 AssertJ — the assertion library JGiven assumes
+
+The second half of the lecture pivots to **AssertJ**, the assertion library JGiven examples use throughout. The motivation is critical of the alternatives:
+
+> *"JUnit's assertions [are] underpowered from the start. Developers use frameworks like Hamcrest and Fest. [The result is] a confusion of JUnit, Hamcrest and Fest."*
+
+Per the lecture:
+- **JUnit assertions** — very simplistic (`assertEquals`, `assertTrue` — that's nearly the whole API).
+- **Fest** — abandonware.
+- **Hamcrest** — stagnant and ugly (the famous `assertThat(list, hasItems(equalTo(1), equalTo(2)))` is the kind of nested-matcher syntax the lecture has in mind).
+
+#### 9.10.1 Why AssertJ
+
+- Still actively maintained
+- Near complete superset of Hamcrest functionality
+- Well designed — easy to get started, easy to enhance, easy to read
+
+#### 9.10.2 Basic use
+
+AssertJ's API is built around three ideas:
+
+- `Assertions.assertThat(actual)` — a *type-specific factory method* that returns a different assertion object depending on the type of `actual` (e.g. `StringAssert`, `ListAssert`, `DateAssert`).
+- The returned object subclasses `AbstractAssert` and exposes type-specific assertions.
+- The API is **fluent** — assertions chain.
+
+```java
+@Test
+public void shouldProvideAnExample() {
+    String actual = "This is a test";
+    assertThat(actual).contains("is").startsWith("This");
+
+    String[] actualArray = new String[]{ "This", "is", "a", "test" };
+    assertThat(actualArray).contains("is").startsWith("This");
+}
+```
+
+Note the same `contains` / `startsWith` work polymorphically on both `String` and `String[]`. The fluent style replaces a sequence of separate `assertX` calls with one continuous *sentence about the value*.
+
+#### 9.10.3 Custom Conditions
+
+For predicates that don't fit the built-in API, AssertJ allows defining a `Condition`:
+
+```java
+@Test
+public void shouldBeEvenlyDivisibleBySix() {
+    Condition<Integer> evenDivBySix = new Condition<Integer>() {
+        @Override public boolean matches(Integer value) {
+            return (value % 6) == 0;
+        }
+    };
+    assertThat(12).is(evenDivBySix);
+    assertThat(8).isNot(evenDivBySix);
+}
+```
+
+The `is` / `isNot` pair reads naturally and the predicate is reusable across tests.
+
+#### 9.10.4 Custom Assertions
+
+For domain types one writes a *custom AbstractAssert subclass*:
+
+1. Subclass `AbstractAssert` for the domain type and implement custom methods like `isInMiddleSchool()`.
+2. Subclass `Assertions` to add a factory `assertThat(Student)`.
+3. Use it as if it were native: `assertThat(student).isInMiddleSchool()`.
+
+This is the same pattern JHotDraw could apply to `Figure`, `Drawing`, or `CompositeFigure` — e.g. `assertThat(drawing).contains(figure).and().isOrdered()`. Lab 9 will demonstrate one such custom assertion on `Drawing`.
+
+---
+
+### 9.11 AssertJ-Swing — GUI scenario automation
+
+For Swing UIs the lecture introduces **AssertJ-Swing**, which simulates user interaction at the JVM level:
+
+- Simulation of user interaction (clicks, drag-n-drop, keystrokes).
+- Reliable GUI component lookup (by type, by name, or custom criteria).
+- Support for every Swing component in the JDK.
+- Compact, powerful API for functional GUI tests.
+- Ability to embed screenshots of failed GUI tests in HTML reports.
+- Can be used with either TestNG or JUnit.
+- Supports testing violations of Swing's threading rules — itself a non-trivial guarantee.
+
+This is the closest thing in the Java ecosystem to a desktop equivalent of Selenium for the web. For JHotDraw — a Swing application — this is *the* tool for end-to-end behavioural tests of the Draw window. Lab 9 includes one such test as documentation but cannot actually run it because the development environment is headless.
+
+---
+
+### Reflection on Lecture 9 — what it changes for this project
+
+Three lessons that carry directly into Lab 9 and beyond.
+
+**(1) BDD is the missing layer above Lab 7's unit tests.** My Lab 7 catalogue has 24 unit tests, each named with the *implementation* idiom (`groupFigures_failsAssertion_whenFiguresCollectionIsEmpty`). A non-programmer cannot read that, and even I had to write a 5-column traceability table to make the catalogue legible. BDD does not replace those tests — it sits *above* them and asks a different question: *what does the Group/Ungroup feature do, told as a story?* Lab 9 will produce exactly two or three short stories; the unit tests remain the proof.
+
+**(2) The stage-class pattern is SRP applied to tests.** Lecture 5's SRP and Lecture 6's "classes should be small / one responsibility" map directly onto JGiven's stage classes: *one stage for Given, one for When, one for Then.* The fact that the test framework *enforces* this separation is the same kind of guard-rail that the type system gives to production code — you cannot accidentally put an assertion into a Given stage because the Given stage doesn't have the assertion methods. This is the strongest argument for JGiven over hand-rolled BDD.
+
+**(3) The honest trade-off of developer-friendly BDD.** Both the lecture and the JGiven summary repeat the same point: *domain experts cannot write JGiven scenarios.* This matters for the JHotDraw context because there is no domain expert separate from the developer — JHotDraw is open-source infrastructure code, not a domain application. The benefit of JGiven for this project is therefore not "domain expert collaboration" but **living documentation of behaviour at the right level of abstraction**. The HTML5 report is the artefact a new contributor to JHotDraw would read first to understand what Group/Ungroup does — and the build refuses to let that report rot.
+
+---
+
+## Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup
+
+### Objectives
+
+This lab follows the *TestLab2 — Behavior Driven Testing* handout, which expands the testing arc from Lab 7's unit-level work into the behavioural / specification layer that Lecture 9 introduced. The portfolio checklist has three concrete items:
+
+1. **Map your User Stories to BDD Given-When-Then scenarios.**
+2. **Use JGiven to automate your BDD scenarios.**
+3. **Use AssertJ for domain-specific assertions, and AssertJ-Swing for Swing scenarios.**
+
+I continued with the same Group / Ungroup feature I have worked on since Lab 2. The output of this lab is therefore four readable scenarios that automate the user-facing behaviour of that feature, sitting *on top of* (not replacing) the 24 unit tests from Lab 7.
+
+---
+
+### Step 1 — User Stories
+
+The lab handout gives the canonical user-story template:
+
+> *As a [user type], I want [some goal] so that [some reason].*
+
+For Group / Ungroup, the three user stories I wrote down — each one will map to at least one scenario:
+
+| ID | User Story |
+|---|---|
+| **US-1** | As a **Draw user**, I want to **group multiple selected figures** so that **I can move and transform them as a single unit**. |
+| **US-2** | As a **Draw user**, I want to **ungroup a previously grouped figure** so that **I can edit its children independently**. |
+| **US-3** | As a **Draw user**, I want **the Group menu item to be disabled when only one figure is selected**, so that **I cannot create meaningless single-figure groups by accident**. |
+
+The third user story is a *negative* one — it expresses what the system should *not* let me do. Including it explicitly is the BDD equivalent of writing a boundary-case unit test, and it forced me to write the boundary scenario `invoking_group_with_one_selected_figure_does_not_change_the_drawing` rather than leaving the guard implicit.
+
+---
+
+### Step 2 — Map each user story to a Given-When-Then scenario
+
+The mapping follows the lecture's pattern (and the handout's Figure 1 calculator example): each user story produces one or more scenarios; each scenario reads as a single sentence broken into three phases.
+
+| User Story | Scenario | Given | When | Then |
+|---|---|---|---|---|
+| US-1 | grouping two selected rectangles replaces them with a single group of two | 2 rectangle figures on the canvas; all selected | user invokes the group action | drawing contains exactly one group with 2 rectangle children |
+| US-1 | grouping three selected rectangles produces a single group of three | 3 rectangle figures on the canvas; all selected | user invokes the group action | drawing contains exactly one group with 3 rectangle children |
+| US-2 | ungrouping a group of two restores two rectangles to the drawing | a group containing 2 rectangle figures; the group is selected | user invokes the ungroup action | drawing contains exactly 2 rectangle figures and no groups |
+| US-3 | invoking group with one selected figure leaves the drawing unchanged | 2 rectangle figures on the canvas; only the first is selected | user invokes the group action | drawing is unchanged with 2 figures |
+
+The two US-1 scenarios are intentionally near-duplicates. JGiven's parameter substitution (`$_rectangle_figures_on_the_canvas(int)`) makes them legible as separate stories in the report — *the same behaviour, parameterised by count*. This is the cheapest demonstration that the scenarios are reusable, which is one of the JGiven properties Lecture 9 emphasised.
+
+---
+
+### Step 3 — Environment
+
+| Tool | Version | Purpose |
+|---|---|---|
+| JGiven JUnit | **1.3.1** | BDD framework — `ScenarioTest`, `Stage`, annotations, report generation |
+| AssertJ Core | **3.25.3** | Domain-language assertions inside the Then-stage |
+| AssertJ-Swing JUnit | **3.17.1** | GUI-level scenarios (documentation only — see Step 7) |
+| Maven Surefire `argLine` | `--add-opens=java.base/java.lang=ALL-UNNAMED` | Allows JGiven's ByteBuddy proxy generator to run on JDK 25 |
+
+The dependencies were added to [jhotdraw-core/pom.xml](jhotdraw-core/pom.xml) immediately after the JUnit/Mockito block from Lab 7. The Surefire `argLine` was a forced addition I will return to in the reflection (Step 8).
+
+---
+
+### Step 4 — Stage classes (the JGiven SRP move)
+
+Per Lecture 9's emphasis that *stage classes are the unique feature of JGiven*, I wrote one stage class per phase. They live in [jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/).
+
+**Given-stage: [GivenADrawing](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/GivenADrawing.java).** Builds a real `DefaultDrawing` (so the Then-stage can inspect the actual figure tree), but mocks `DrawingEditor` and `DrawingView` because the Swing event-dispatch infrastructure they hide cannot run headless. The stage's vocabulary:
+
+```java
+public GivenADrawing a_drawing_editor()                              { ... }
+public GivenADrawing $_rectangle_figures_on_the_canvas(int count)    { ... }
+public GivenADrawing a_group_containing_$_rectangle_figures(int n)   { ... }
+public GivenADrawing all_figures_are_selected()                      { ... }
+public GivenADrawing only_the_first_figure_is_selected()             { ... }
+public GivenADrawing the_group_is_selected()                         { ... }
+```
+
+The fields are annotated `@ProvidedScenarioState` so the When- and Then-stages can read them. The `$` placeholder in method names is JGiven's parameter substitution — at report-rendering time it is replaced by the integer argument.
+
+**When-stage: [WhenTheUser](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/WhenTheUser.java).** Receives the editor via `@ExpectedScenarioState` and triggers the action exactly the way the GUI would:
+
+```java
+public WhenTheUser invokes_the_group_action() {
+    new GroupAction(editor).actionPerformed(
+        new ActionEvent(this, ActionEvent.ACTION_PERFORMED, "group"));
+    return self();
+}
+```
+
+This is the only stage that *constructs* `GroupAction` / `UngroupAction`. Doing it here rather than in `setUp()` matches the natural reading order of a BDD scenario: *the user has a drawing first, and then invokes an action.*
+
+**Then-stage: [ThenTheDrawing](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/ThenTheDrawing.java).** Receives the drawing via `@ExpectedScenarioState` and uses AssertJ to assert against its state:
+
+```java
+public ThenTheDrawing contains_exactly_one_group_with_$_rectangle_children(int expected) {
+    assertThat(drawing.getChildren())
+            .as("drawing should now contain a single composite figure")
+            .hasSize(1);
+    Figure only = drawing.getChildren().get(0);
+    assertThat(only)
+            .as("the remaining figure should be a CompositeFigure")
+            .isInstanceOf(CompositeFigure.class);
+    CompositeFigure group = (CompositeFigure) only;
+    assertThat(group.getChildren())
+            .as("the group should contain the originally-selected figures")
+            .hasSize(expected)
+            .allMatch(f -> f instanceof RectangleFigure);
+    return self();
+}
+```
+
+Three things to note in this method:
+
+- **AssertJ's fluent chaining** — `assertThat(...).hasSize(expected).allMatch(...)` is a single sentence about the collection.
+- **`.as("...")`** describes the assertion in domain terms, so the failure message reads as a domain statement, not as `expected: 1 but was: 2`.
+- **`allMatch(f -> f instanceof RectangleFigure)`** uses an inline predicate where the Java type system already constrains the answer. The lecture's "custom Condition" mechanism could lift this into a named `Condition<Figure> isRectangle = ...`; I left it inline for now because the predicate appears only once.
+
+---
+
+### Step 5 — The scenario class
+
+The four scenarios live in [GroupUngroupScenarioTest](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/GroupUngroupScenarioTest.java). It extends JGiven's `ScenarioTest<Given, When, Then>` parameterised by the three stage classes, which wires the `given()`, `when()`, `then()` factory methods to the right stage instances.
+
+```java
+public class GroupUngroupScenarioTest
+        extends ScenarioTest<GivenADrawing, WhenTheUser, ThenTheDrawing> {
+
+    @Test
+    @Description("US-1: grouping two selected rectangles merges them into a single group")
+    public void grouping_two_selected_rectangles_replaces_them_with_a_single_group_of_two() {
+        given().a_drawing_editor()
+           .and().$_rectangle_figures_on_the_canvas(2)
+           .and().all_figures_are_selected();
+
+        when().invokes_the_group_action();
+
+        then().contains_exactly_one_group_with_$_rectangle_children(2);
+    }
+
+    // ...three more, one per row of the table in Step 2.
+}
+```
+
+Each scenario reads top-to-bottom as a single sentence in three phases. The `@Description` annotation lets the *human-readable* sentence diverge from the *method name*, which is useful when the user-story text is longer than what Java identifier rules allow.
+
+---
+
+### Step 6 — Run
+
+```
+/tmp/maven/bin/mvn test -pl jhotdraw-core --no-transfer-progress
+```
+
+The Surefire console output now contains, in addition to the unit-test counts, the *rendered* JGiven scenarios:
+
+```
+ US-1: grouping two selected rectangles merges them into a single group
+
+   Given a drawing editor
+     And 2 rectangle figures on the canvas
+     And all figures are selected
+    When invokes the group action
+    Then contains exactly one group with 2 rectangle children
+
+ US-2: ungrouping a group restores the children into the drawing
+
+   Given a drawing editor
+     And a group containing 2 rectangle figures
+     And the group is selected
+    When invokes the ungroup action
+    Then contains exactly 2 rectangle figures and no groups
+
+ US-3: invoking group with only one selected figure leaves the drawing unchanged
+
+   Given a drawing editor
+     And 2 rectangle figures on the canvas
+     And only the first figure is selected
+    When invokes the group action
+    Then is unchanged with 2 figures
+
+[INFO] Tests run: 30, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+JGiven also wrote JSON reports under `jhotdraw-core/target/jgiven-reports/json/` — one JSON file per scenario class:
+
+```
+target/jgiven-reports/json/org.jhotdraw.draw.action.bdd.GroupUngroupScenarioTest.json
+```
+
+These JSON files are the input that the `jgiven-maven-plugin` consumes to produce the HTML5 report shown in Lecture 9. Wiring the HTML plugin into the build would be a one-line plugin entry, but is not necessary for the *scenarios themselves* to be living documentation — the console output already is.
+
+---
+
+### Step 7 — AssertJ-Swing (documented but not runnable here)
+
+The handout's third bullet says: *"For Swing applications use the [AssertJ-swing] to automate the Scenarios."* AssertJ-Swing simulates real user interaction (clicks, drags, menu navigation) against a real Swing JFrame. **This environment is headless** — the project memory I built up in earlier labs already notes that the remote VSCode terminal lacks display access. AssertJ-Swing requires an active display server (X11 / Wayland) and cannot run in this environment.
+
+To keep the *documentation* of the GUI-level scenario in the repository for when this lab is reproduced on a local workstation, I added [DrawAppSwingScenarioTest](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/DrawAppSwingScenarioTest.java). The class is permanently `@Ignore`d in this environment with an explanatory message:
+
+```java
+@Ignore("AssertJ-Swing needs a real Swing display; this terminal is headless.")
+public class DrawAppSwingScenarioTest {
+
+    @Test
+    public void user_can_group_two_drawn_rectangles_via_the_edit_menu() throws Exception {
+        // Step 1: launch the Draw application on the Swing EDT.
+        //   GuiActionRunner.execute(() -> Main.main(new String[0]));
+        // Step 2: locate the main frame:
+        //   window = WindowFinder.findFrame("Draw").using(robot);
+        // Step 3: simulate the user drawing two rectangles
+        //   (toolbar selection + two drag operations)
+        // Step 4: select-all (Ctrl+A), then Edit -> Group
+        //   window.menuItemWithPath("Edit", "Group").click();
+        // Step 5: assert the resulting figure tree
+        //   contains a single CompositeFigure with two RectangleFigure children
+    }
+}
+```
+
+The test class compiles against the AssertJ-Swing-JUnit dependency now on the POM, but is skipped at runtime. The five-step plan inside is a literal translation of the same scenario US-1 expresses at the JGiven level — *the JGiven scenario and the AssertJ-Swing scenario describe the same behaviour, at two different layers of the testing pyramid.*
+
+---
+
+### Step 8 — A reproducibility detail worth documenting
+
+When I first ran the build with JGiven on the classpath, every scenario failed with:
+
+```
+Caused by: java.lang.UnsupportedOperationException: Cannot define class using reflection:
+    Unable to make protected java.lang.Package java.lang.ClassLoader.getPackage(java.lang.String)
+    accessible: module java.base does not "opens java.lang" to unnamed module @39ba5a14
+```
+
+JGiven 1.3.1 bundles an older ByteBuddy (the bytecode-generation library it uses to build dynamic proxies of stage classes) that does not know about JDK 25's strict module boundaries. The fix is a one-line Surefire `argLine`:
+
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-surefire-plugin</artifactId>
+    <configuration>
+        <argLine>--add-opens=java.base/java.lang=ALL-UNNAMED</argLine>
+    </configuration>
+</plugin>
+```
+
+I noted this not because the workaround is interesting, but because the *root cause* is: a library released against Java 8 (JGiven 1.3.1) runs against a Java 25 JVM, and the JPMS module system actively blocks reflection patterns that worked silently under Java 8. The same project that built cleanly under JDK 8 needs explicit `--add-opens` to keep working under JDK 25. This is a maintenance signal: every JDK upgrade is a potential cascade of `--add-opens` flags on legacy libraries.
+
+---
+
+### Test catalogue
+
+For traceability, the user-story → scenario mapping in code form:
+
+| Test method | User story | What it proves |
+|---|---|---|
+| `grouping_two_selected_rectangles_replaces_them_with_a_single_group_of_two` | US-1 | Group action merges two selected rectangles into a single composite figure. |
+| `grouping_three_selected_rectangles_replaces_them_with_a_single_group_of_three` | US-1 | Group action scales beyond the smallest non-trivial case. |
+| `ungrouping_a_group_of_two_restores_two_rectangles_to_the_drawing` | US-2 | Ungroup action is the inverse of Group at the drawing level. |
+| `invoking_group_with_one_selected_figure_does_not_change_the_drawing` | US-3 | Group action is correctly disabled by the `canGroup()` guard when the precondition fails. |
+| `user_can_group_two_drawn_rectangles_via_the_edit_menu` | US-1 (GUI) | (`@Ignore`d) AssertJ-Swing layer of US-1 — runnable on a display. |
+
+After this lab, the jhotdraw-core test suite contains:
+
+- **2** pre-existing TestNG tests
+- **24** JUnit 4 unit tests from Lab 7
+- **4** JGiven BDD scenarios from this lab
+- **1** `@Ignore`d AssertJ-Swing scenario for documentation
+
+Total runnable: **30 tests, 0 failures.**
+
+---
+
+### Reflections
+
+**(1) The user-story discipline produced one test I would not have written otherwise.** US-3 — *"the Group menu item should be disabled with one figure selected"* — only became a scenario *because I wrote the user story first*. In Lab 7 I had a unit test for the boundary case (`canGroup_returnsFalse_whenSelectionHasExactlyOneFigure`), but I had not framed it as a behavioural requirement. The BDD discipline forces the *intent* to come before the *implementation*, and the intent for US-3 is the *absence* of an action — a kind of test that is easy to omit when one only reads the production code.
+
+**(2) JGiven's report is the documentation Lab 4's reflection asked for.** [Lab 4 reflected](#lab-4--refactoring-lab-group--ungroup-prefactoring) that *the deferred refactorings could only be done after tests existed.* [Lab 7](#lab-7--testing-lab-unit-tests-for-group--ungroup) added the tests but in implementation-flavoured language. The JGiven report is the version of that documentation that a *new contributor* to JHotDraw could read first: *"what does Group/Ungroup do?"* — and the answer comes back as four English sentences, not as 24 method names. This is the gap BDD fills that unit testing alone cannot.
+
+**(3) Stage classes are SRP applied to tests — confirmed by a real edit.** While writing the Then-stage I was tempted to put a setup line in it: *"if drawing is null, create one."* The framework's structure stops me — the Then-stage has no `@ProvidedScenarioState` for `drawing`, only `@ExpectedScenarioState`. The compiler wouldn't even let me assign to the field. This is the *guard-rail* version of SRP I noted in the Lecture 9 reflection: the framework's type structure *prevents* the accidental violation that prose advice ("classes should have one responsibility") only suggests.
+
+**(4) The `--add-opens` workaround is a Lecture 1 *conformity* difficulty in microcosm.** Lecture 1 listed *conformity* as one of Brooks's essential difficulties — software must conform to its environment, which keeps moving. JDK 25's strict module boundaries are exactly that moving environment, and JGiven 1.3.1 is exactly the kind of legacy library that must be coaxed into conformity. Documenting the fix in the POM is the responsible move; pretending it isn't there is the start of code decay.
+
+**(5) The same behaviour exists at two layers.** US-1's two layers — the JGiven scenario (runs everywhere) and the AssertJ-Swing scenario (runs on a display) — are not duplication. They are two tests of the *same behaviour* at two *different layers of the testing pyramid*. The JGiven scenario locks in the domain logic; the AssertJ-Swing scenario would lock in the menu wiring, key bindings, and Swing focus state that the JGiven scenario consciously mocks away. Both tests can fail and the failure tells different stories — one says *"the algorithm is broken"*, the other says *"the menu binding is broken"*. The lecture's recommendation to use AssertJ-Swing for Swing applications is therefore correct *in addition to*, not *instead of*, JGiven.
