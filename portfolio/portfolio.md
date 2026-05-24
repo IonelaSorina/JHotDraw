@@ -16,6 +16,8 @@
 6. [Lab 3 — Continuous Integration and Impact Analysis](#lab-3--continuous-integration-and-impact-analysis)
 7. [Lecture 4 — Refactoring and Refactoring to Patterns](#lecture-4--refactoring-and-refactoring-to-patterns)
 8. [Lab 4 — Refactoring Lab: Group / Ungroup Prefactoring](#lab-4--refactoring-lab-group--ungroup-prefactoring)
+9. [Lecture 5 — Actualization, OO Principles and Clean Architecture](#lecture-5--actualization-oo-principles-and-clean-architecture)
+10. [Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw](#lab-5--actualization-lab-solid-and-clean-architecture-in-jhotdraw)
 
 ---
 
@@ -1440,3 +1442,353 @@ The two main reflections from the lab:
 1. **Test coverage is the rate-limiter on refactoring scope.** Three of the four most valuable refactorings I identified (Replace Conditional with Polymorphism, Form Template Method, Collapse Hierarchy) had to be deferred not because they were wrong, but because the existing test suite was too thin to give a safe refactor net. Lecture 3's CI emphasis and Lecture 4's behaviour-preservation principle are not independent — *you can only refactor as deeply as your tests let you*. The Lab 5 deliverable (writing real tests for Group/Ungroup) is the gate to those deeper refactorings.
 
 2. **The smell catalogue and the pattern catalogue are mutually clarifying.** Reading `GroupAction` *before* Lecture 4 looked like a slightly-too-long Java class with some redundancy. Reading it *with* the catalog in mind made every smell jump out by name, and made the path between smell and refactoring direct rather than improvised. This is Kerievsky's claim from the lecture made concrete: design patterns and refactorings together form a vocabulary that turns vague unease about code into actionable steps.
+
+---
+
+## Lecture 5 — Actualization, OO Principles and Clean Architecture
+
+The fifth lecture block landed at the centre of the phased model — the *Actualization* phase, where the code physically changes — and surrounded that mechanic with the design vocabulary needed to do it well: SOLID, GRASP, the Composite Reuse and Least-Knowledge principles, and finally Robert C. Martin's Clean Architecture. Where Lecture 4 gave the *therapy* (named small refactorings), Lecture 5 gives the *health criteria* the therapy is trying to achieve.
+
+---
+
+### 5.1 The Actualization Phase
+
+Actualization is phase 5 of the seven-phase software-change model from Lecture 2: *programmers implement the new functionality according to the change request*. It sits between Prefactoring (phase 4, which I performed in Lab 4) and Postfactoring (phase 6). The shape of an actualization varies with the change size:
+
+- **Small changes** are done directly in the old code. The lecture's canonical example is widening a US ZIP code from `char zip[5]` to `char zip[9]`: one-token edit, no new classes, no incorporation.
+- **Larger changes** implement the new classes *separately* from the old code, then plug the result in. Two terms name the two halves of that operation:
+    - **Incorporation** — the new classes are wired into the existing code at one or more points.
+    - **Ripple effect** — the change propagates outward from the incorporation point along interaction edges to classes that need secondary modifications.
+
+The four functional impacts from Lecture 2 (incremental / contraction / replacement / refactoring) each manifest differently at actualization time. Adding a new component (incremental) is a clean incorporation with outward ripple. Replacement of a class redirects the old class's clients to the new class. Deletion of obsolete functionality (contraction) also ripples — every reference to the deleted entity has to be removed.
+
+#### Polymorphism as the cleanest actualization
+
+The lecture's first concrete example is the `Farm / FarmAnimal / Cow / Sheep / Pig` hierarchy. Adding `Pig` requires:
+
+```cpp
+class Pig : public FarmAnimal {
+public:
+    void makeSound() { cout << "Oink"; }
+};
+```
+
+…and zero changes to `Farm`. The composite responsibility of `Farm` is *extended* by the concept Pig — no client of `Farm` has to be modified. This is the actualization-time payoff of obeying the Open/Closed Principle: a change becomes additive instead of intrusive.
+
+#### Change-propagation in a Point-of-Sale example
+
+The slides walk a Point-of-Sale change ("add a cashier login") through:
+
+1. Add a new `Cashiers` class separately.
+2. Incorporate it as a supplier of `Store` (the closest natural binding).
+3. Watch the change ripple: `item` needs new attributes → `saleLineItem` notices → `sale` notices → `register` notices → propagation stops where no further interaction exists.
+
+The propagation graph mirrors the *impact analysis* of Lecture 3 — but lived through, not predicted. The lecture's slogan: **change propagation is the moment of truth** for impact analysis. It either confirms or refutes the impact set you committed to in the IA phase.
+
+#### Ericsson Radio Systems — impact-set accuracy
+
+The lecture closes with empirical data from Ericsson:
+
+|         | Predicted Unchanged | Predicted Changed |
+|---|---|---|
+| **Actual Unchanged** | 42 | 0 |
+| **Actual Changed** | 64 | 30 |
+
+Total 136 classes. From this:
+
+- True positives = 30, false positives = 0, true negatives = 42, false negatives = 64.
+- **Precision** = TP / (TP + FP) = 30 / 30 = **100 %**.
+- **Recall** = TP / (TP + FN) = 30 / 94 ≈ **32 %**.
+
+Programmers correctly predicted that what they marked as Changed *would* change — but missed two-thirds of the classes that actually had to change. The lecture's reading: under-estimation is a chronic consequence of *invisibility* (the essential difficulty from Lecture 1) and is one of the strongest arguments for verification scaffolding (tests + CI) that catches the missed two-thirds before they reach users.
+
+---
+
+### 5.2 Object-Oriented Principles — SOLID, CRP and PLK
+
+Robert C. Martin's *Design Principles and Design Patterns* (2000) introduced what Michael Feathers later named SOLID. The lecture adds two further principles often grouped with SOLID: the Composite Reuse Principle and the Principle of Least Knowledge (Law of Demeter).
+
+| Letter | Principle | One-line meaning |
+|---|---|---|
+| **S** | Single Responsibility | A class should have only one reason to change. |
+| **O** | Open / Closed | Software entities should be open for extension but closed for modification. |
+| **L** | Liskov Substitution | Subclasses should be substitutable for their base classes without altering correctness. |
+| **I** | Interface Segregation | Many specific interfaces are better than one general-purpose interface. |
+| **D** | Dependency Inversion | Depend upon abstractions; do not depend upon concretions. |
+| *CRP* | Composite Reuse | Favour polymorphic composition of objects over class inheritance. |
+| *PLK* | Least Knowledge (Law of Demeter) | An operation on class *C* should only call operations on: itself, its parameters, objects it creates, or its contained instance objects. |
+
+The lecture's slides illustrated each principle with a small "without X / with X" pair:
+
+- **SRP**: A `UserService` doing both `changePassword` and `checkAccess` is split into `UserService` (changes passwords) and `SecurityService` (checks access).
+- **OCP**: A `LoanApprovalHandler` that hard-codes `PersonalLoanValidator` is rewritten to depend on a `Validator` interface; `PersonalLoanValidator` and `HomeLoanValidator` both implement it.
+- **LSP**: A `Bird` hierarchy where `Ostrich.fly()` throws `UnsupportedOperationException` is restructured into `FlightBird` / `NonFlightBird`, so subclasses' contracts match their supertype.
+- **ISP**: An `IUser` interface that mixes `changePassword` / `checkUserRole` / `assignRole` is split into `IUser`, `IUserRole`, and `IRole`.
+- **DIP**: A `Payments` class that constructs `new CreditCardPaymentMethod()` internally is rewritten to receive a `PaymentMethod` in its constructor — the dependency is inverted from concrete-class instantiation to abstract-interface injection.
+
+The two satellite principles:
+
+- **CRP**: "One of the most catastrophic mistakes that contribute to the demise of an object-oriented system is to use inheritance as the primary reuse mechanism." Delegation is usually better. This is the same idea as Fowler's *Replace Inheritance with Delegation* (Lecture 4) at the architectural level.
+- **PLK / Law of Demeter**: avoid `a.getB().getC().doSomething()` — transitive visibility means the caller knows the *structural makeup* of `a`'s neighbours. Limit each method to talking to itself, its parameters, its fields, and the objects it creates.
+
+Crucial connection from the lecture: **DIP tells us how to obey OCP.** Without DIP, the only way to make a class "closed for modification but open for extension" is to make every concrete dependency negotiable through an interface. The two principles are two faces of the same idea.
+
+---
+
+### 5.3 GRASP — General Responsibility Assignment Software Patterns
+
+Where SOLID gives *class-level* design constraints, Craig Larman's GRASP gives the patterns for *assigning responsibilities*. The acronym stands for General Responsibility Assignment Software Patterns; the catalogue has nine entries:
+
+| # | Pattern | The question it answers |
+|---|---|---|
+| 1 | **Information Expert** | Which class has the data needed to fulfil the responsibility? Assign it there. |
+| 2 | **Creator** | Which class should be responsible for creating instances of class A? The one that aggregates, contains, records, closely uses, or has the initialising data for A. |
+| 3 | **Low Coupling** | Assign the responsibility so the resulting class depends on as few others as possible. |
+| 4 | **High Cohesion** | Assign the responsibility so the class's purpose stays focused and unrelated work does not accumulate. |
+| 5 | **Controller** | Where does an external event enter the system? A controller class (facade or use-case controller) — *not* a window, widget, or document class. |
+| 6 | **Polymorphism** | When behaviour varies by type, use polymorphic operations on the varying type — not type-code switching. |
+| 7 | **Indirection** | When two components must not be directly coupled, introduce an intermediary to mediate. Beware transitive visibility (this is the same trade-off as PLK). |
+| 8 | **Pure Fabrication** | When no domain class is a good owner of a responsibility, invent a non-domain *fabrication* class to host it (e.g. `PersistentStorage`, `ButtonFactory`). |
+| 9 | **Protected Variations** | Identify points of predicted variation and put a stable interface around them. Same shape as OCP, broader applicability. |
+
+GRASP is the practical bridge between "I have a use case in mind" and "here are the classes that should exist". SOLID *constrains* class design after responsibilities are assigned; GRASP *guides* the assignment itself. The two are complementary rather than competing.
+
+---
+
+### 5.4 Clean Architecture
+
+Robert C. Martin's *Clean Architecture* is an architectural pattern (distinct from GoF *design patterns*, which solve smaller problems within a class or small cluster). The defining diagram is a set of concentric rings:
+
+```
+┌─────────────────────────────────────────────────┐
+│  Frameworks & Drivers (Web, UI, DB, Devices)    │  <- outer
+│  ┌───────────────────────────────────────────┐  │
+│  │  Interface Adapters (Controllers,         │  │
+│  │  Gateways, Presenters)                    │  │
+│  │  ┌──────────────────────────────────────┐ │  │
+│  │  │  Application Business Rules          │ │  │
+│  │  │  (Use Cases / Interactors)           │ │  │
+│  │  │  ┌────────────────────────────────┐  │ │  │
+│  │  │  │ Enterprise Business Rules     │  │ │  │
+│  │  │  │ (Entities)                    │  │ │  │
+│  │  │  └────────────────────────────────┘  │ │  │
+│  │  └──────────────────────────────────────┘ │  │
+│  └───────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────┘
+```
+
+The four rings, from inside out:
+
+- **Entities** — *enterprise-wide* business rules. The most general and least likely to change. In a banking system, an `Account` entity. In a drawing framework, a `Figure`.
+- **Use Cases** (also called Interactors) — application-specific rules. Coordinate entities to perform one user goal. Isolated from the database, frameworks, and the UI.
+- **Interface Adapters** — convert data between the format used by use cases / entities and the format used by external systems (databases, the web). Includes Presenters (MVP), View Models (MVVM), and Gateways / Repositories.
+- **Frameworks & Drivers** — the outermost layer: web framework, database engine, UI toolkit, HTTP client, device drivers.
+
+#### The Dependency Rule
+
+The most important architectural constraint: **source-code dependencies must point inward.** Inner rings know nothing about outer rings. The use-case layer never imports a concrete database class; the entity layer never imports a use case. When data needs to cross the boundary outward, it goes through a *Boundary* interface (input boundary, output boundary) implemented by the inner ring and consumed by the outer ring — a direct application of the Dependency Inversion Principle from Section 5.2.
+
+The flow of a single user action:
+
+1. User clicks a button (Delivery Mechanism → outer ring).
+2. The delivery mechanism builds a **Request Model** (primitive data, no entities) and hands it to an input Boundary.
+3. The Interactor (Use Case) receives the request, orchestrates entities, and produces a **Response Model** through an output Boundary.
+4. A **Presenter** (Interface Adapters layer) translates the response model into a **View Model** suitable for the View.
+5. The View renders the View Model. The View is so simple that "you can test it with your eyes" — no logic to unit-test.
+
+#### What about the database?
+
+Martin's slogan: *"If something changes a lot, it should be a plug-in. If something doesn't change very often, it should be plugged into."* The database is a detail, not the centre of the architecture. Business rules should not be stored procedures, because that couples them to a specific database engine. The database connects to the entities through an *Entity Gateway* interface — the implementation lives in the outer Interface Adapters ring.
+
+#### Characteristics of a successful architecture
+
+The lecture lists four:
+
+- **Testable** — business rules can be tested without UI, DB, or frameworks.
+- **Independent of UI** — UI can change without touching business rules.
+- **Independent of database** — the database can be switched (RDBMS ↔ NoSQL) without rippling.
+- **Independent of frameworks and external entities** — libraries are *tools*, not the centre of gravity.
+
+These four are not separate goals; they are corollaries of the Dependency Rule.
+
+---
+
+### Reflection on Lecture 5
+
+The fifth lecture closes a loop that started in Lecture 1. Software's *essential difficulties* (complexity, invisibility, changeability, conformity, discontinuity) drive the need for a structured *change process* (Lecture 2's phased model). The change process needs *measurement* and *teamwork* to scale (Lecture 3). The change process needs *behaviour-preserving transformations* and a *vocabulary of smells and patterns* to keep code healthy under change (Lecture 4). And finally, the change process needs *architectural and class-level principles* — SOLID, GRASP, Clean Architecture — to ensure that each individual change leaves the codebase more, not less, able to absorb the next change.
+
+The Ericsson 32 % recall figure from Section 5.1 is the empirical anchor for everything in this block. Programmers under-estimate the impact set; the architecture must absorb the missed impact gracefully. A monolithic procedural design fails this test catastrophically — every missed dependency becomes a production defect. A Clean Architecture with strict inward-pointing dependencies and well-segregated interfaces makes the missed-dependency case much less expensive: the missed class either uses the abstraction safely (no change needed) or shows up at compile time (immediate, cheap discovery).
+
+For the JHotDraw work in Lab 5, the most actionable framing is this: read the codebase with SOLID glasses on, identify where the framework already obeys each principle (extensibility patterns from Lecture 2.4 mostly arose from SOLID-compatible design choices), and identify where the framework violates a principle and what the cost is. The result is not a finished design critique — it is an *evidence-grounded* map of where future refactoring effort will pay off.
+
+---
+
+## Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw
+
+The Lab 5 handout asks for two portfolio deliverables:
+
+1. *Provide examples of the SOLID principles in context of the CASE study.*
+2. *Explain Clean Architecture in context of the CASE Study.*
+
+Both are documentation deliverables. The "actualization" framing in the lab name is conceptual rather than implementation-driven: in the phased model from Lecture 2, the Group / Ungroup feature has now been impact-analysed (Lab 3b) and pre-factored (Lab 4); the next phase that would write new code is bounded by the SOLID / Clean-Architecture criteria documented below. This portfolio section is the artefact that would gate the Actualization step on a real team.
+
+---
+
+### Methodology
+
+I inspected the JHotDraw codebase along two axes:
+
+- **Per-principle search.** For each SOLID letter, I searched for one positive example (the framework obeys the principle) and, where present, one violation. I cited specific file paths and where useful, line numbers — the same convention used in earlier labs.
+- **Module-level mapping.** I mapped the nine Maven modules of JHotDraw onto the four rings of Clean Architecture and tested the Dependency Rule by tracing inward-pointing imports.
+
+Source of evidence: the Maven module tree under [jhotdraw-api/](jhotdraw-api/), [jhotdraw-core/](jhotdraw-core/), [jhotdraw-gui/](jhotdraw-gui/), [jhotdraw-app/](jhotdraw-app/), [jhotdraw-samples/](jhotdraw-samples/), plus the actual file system layout reported by `find` and quick `grep` checks for telltale patterns (`throw new UnsupportedOperationException`, `extends GroupAction`, etc.).
+
+---
+
+### SOLID in JHotDraw
+
+#### S — Single Responsibility Principle
+
+**Positive example.** [`GroupFigure`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/GroupFigure.java) has exactly one responsibility: be a concrete composite of Figures used as the prototype that `GroupAction` clones. Its constructor calls `setConnectable(false)` (groups shouldn't accept connector attachments), it provides `chop()` for connector geometry, and it overrides `isTransformable()` to be true only when all children are. Nothing more. A reader can predict everything the class does from its name plus its superclass.
+
+**Violation.** [`GroupAction`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java) is the textbook SRP violation: it holds *both* the grouping logic and (the inverse) the ungrouping logic, dispatched by `private boolean isGroupingAction`. By Robert C. Martin's definition ("a class should have only one reason to change"), `GroupAction` has at least two reasons: a change to how figures are grouped, *or* a change to how groups are ungrouped, would force a modification to the same file. The class also serves as the prototype-holder *and* the undo-edit factory *and* the Action — three further responsibilities. The Lab 4 *Compose Method* refactoring (extracting `performGroup` / `performUngroup`) reduced the visual coupling but did not fix the underlying SRP problem; doing so requires the bigger *Replace Conditional with Polymorphism* refactoring deferred at the end of Lab 4.
+
+#### O — Open / Closed Principle
+
+**Positive example.** `GroupAction` is *open for extension* via the constructor
+
+```java
+public GroupAction(DrawingEditor editor, CompositeFigure prototype)
+```
+
+— and the canonical evidence is [`ODGApplicationModel.java:91`](jhotdraw-samples/jhotdraw-samples-misc/src/main/java/org/jhotdraw/samples/odg/ODGApplicationModel.java#L91):
+
+```java
+a.add(new GroupAction(editor, new ODGGroupFigure()));
+```
+
+The ODG sample plugs in its own group-figure variant *without* modifying `GroupAction`. The same mechanism is used by SVG. This is the Prototype pattern (from Lecture 2.4) serving an OCP role: it turns what would otherwise be a subclass-explosion into a single class with a pluggable collaborator.
+
+**Where it stops.** OCP holds for the *figure being grouped* but not for the *operation itself*. To add a new operation modelled like Group/Ungroup (e.g. a hypothetical *Cluster* that groups by colour), one must edit `GroupAction` or introduce a parallel action class. The framework is open to varying *what* is grouped, closed to varying *how* the grouping is dispatched.
+
+#### L — Liskov Substitution Principle
+
+**Positive example.** [`CompositeFigure`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/CompositeFigure.java) extends [`Figure`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/Figure.java) and is honoured as a `Figure` everywhere. Every method of `GroupAction.groupFigures` operates on `Figure` references; the runtime types include `GroupFigure`, `SVGGroupFigure`, `ODGGroupFigure`, and ordinary leaf figures, and the code is correct for all of them. This is the Composite pattern obeying LSP by construction.
+
+**Violation.** Several Tool implementations throw `UnsupportedOperationException` for inherited methods they choose not to support — for example [`TextEditingTool.java:166`](jhotdraw-core/src/main/java/org/jhotdraw/draw/tool/TextEditingTool.java#L166) and [`TextAreaEditingTool.java:173`](jhotdraw-core/src/main/java/org/jhotdraw/draw/tool/TextAreaEditingTool.java#L173). A client holding a `Tool` reference cannot freely substitute these subtypes without risking a runtime exception that the base interface does not advertise. The same pattern appears in [`DefaultDrawingViewTransferHandler.java:497`](jhotdraw-core/src/main/java/org/jhotdraw/draw/DefaultDrawingViewTransferHandler.java#L497). This is exactly the "Ostrich extends Bird" smell from the lecture: the supertype promises behaviour that some subtypes refuse to provide.
+
+#### I — Interface Segregation Principle
+
+**Positive example.** Instead of one omnibus `DrawingEditor` interface, JHotDraw exposes four small, focused interfaces:
+
+- [`Figure`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/Figure.java) — what a single drawable shape can do.
+- [`CompositeFigure`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/CompositeFigure.java) — adds child-management on top of `Figure`. Clients that don't need composition never see those methods.
+- [`Drawing`](jhotdraw-core/src/main/java/org/jhotdraw/draw/Drawing.java) — the document model that holds top-level figures.
+- [`DrawingView`](jhotdraw-core/src/main/java/org/jhotdraw/draw/DrawingView.java) — the selection + viewport adapter on top of a `Drawing`.
+
+`GroupAction` only depends on `DrawingView` and `CompositeFigure` — it does not have to know about Tools, Handles, layouters, or any of the dozen other concerns the editor has. ISP is being respected.
+
+**Slight tension.** [`View`](jhotdraw-api/src/main/java/org/jhotdraw/api/app/View.java) (378 lines) and [`ApplicationModel`](jhotdraw-api/src/main/java/org/jhotdraw/api/app/ApplicationModel.java) (219 lines) in `jhotdraw-api` are large interfaces. They are each focused on one concern (an open document tab, the application's responsibility-providing object), so they are cohesive rather than mixed — but their sheer size means that sample applications implementing them inherit ~30 mandatory methods. A stricter ISP application would extract sub-interfaces (`Persistable`, `Disposable`, `Activatable`) and let `View` extend them — partially done already with `Disposable`, but not finished.
+
+#### D — Dependency Inversion Principle
+
+**Positive example.** The `GroupAction` constructor signature
+
+```java
+public GroupAction(DrawingEditor editor, CompositeFigure prototype)
+```
+
+declares both dependencies as *interfaces*, not concrete classes. The action depends on abstractions; the concrete `DefaultDrawingEditor` and `GroupFigure` (or `ODGGroupFigure`, `SVGGroupFigure`) instances are *injected* by the caller. Inside the method body, `view.getDrawing().basicAddAll(...)` further depends on the [`Drawing`](jhotdraw-core/src/main/java/org/jhotdraw/draw/Drawing.java) interface — the action neither knows nor cares whether the underlying implementation is `DefaultDrawing`, `QuadTreeDrawing`, or some future variant.
+
+**Architectural consequence.** The dedicated `jhotdraw-api` Maven module is itself a DIP artefact: it holds the stable application-shell abstractions (`Application`, `ApplicationModel`, `View`, `MenuBuilder`, `URIChooser`), and *concrete* implementations live in `jhotdraw-app` and the sample modules. The dependency arrow points *into* `jhotdraw-api`, not out of it.
+
+**Where DIP is partial.** Many of the most central abstractions of the framework (`Figure`, `Drawing`, `DrawingView`, `Tool`, `Handle`) live in `jhotdraw-core` rather than `jhotdraw-api` — co-located with their default implementations. A strict DIP layout would move these interfaces into `jhotdraw-api` and leave only the `Abstract*` and `Default*` implementations in `jhotdraw-core`. This split is discussed in detail in the Clean Architecture section below.
+
+---
+
+### Clean Architecture in JHotDraw
+
+#### Mapping the Maven modules onto Martin's four rings
+
+| Clean Architecture ring | JHotDraw realisation | Why |
+|---|---|---|
+| **Entities** (enterprise-wide business rules) | `Figure`, `Drawing`, `CompositeFigure` interfaces + `AbstractFigure`, `AbstractCompositeFigure` base classes in [`jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/) | A drawing framework's "domain" is figures and drawings. These types know nothing about Swing, XML serialisation, or the application shell — they are the most stable concepts in the whole codebase. |
+| **Use Cases** (application-specific rules) | The Action classes in [`jhotdraw-core/src/main/java/org/jhotdraw/draw/action/`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/) — `GroupAction`, `UngroupAction`, `CutAction`, `PasteAction`, … | Each Action is one user-facing use case (group selection, paste from clipboard, etc.). The Action coordinates figures and the drawing model but knows nothing about how Swing dispatches a menu click. |
+| **Interface Adapters** (presenters, gateways, controllers) | [`jhotdraw-gui/`](jhotdraw-gui/) — Swing controls and ButtonFactory; `DrawingView`, `DrawingEditor` implementations in [`jhotdraw-core/src/main/java/org/jhotdraw/draw/`](jhotdraw-core/src/main/java/org/jhotdraw/draw/); the XML reader/writer in [`jhotdraw-xml/`](jhotdraw-xml/); the clipboard / DnD support in [`jhotdraw-datatransfer/`](jhotdraw-datatransfer/) | These convert between domain shapes (`Figure`, `Drawing`) and externally consumable formats (Swing components, XML documents, system clipboard payloads). |
+| **Frameworks & Drivers** (outermost) | The Swing JDK itself; the per-application shells in [`jhotdraw-app/`](jhotdraw-app/), [`jhotdraw-samples/jhotdraw-samples-misc/`](jhotdraw-samples/jhotdraw-samples-misc/) and `-mini`; the `jhotdraw-api` *app-shell* interfaces in [`jhotdraw-api/`](jhotdraw-api/) | The applications wire Swing widgets, action classes, and the drawing model into a runnable program. They are the most volatile part of the system — every sample app has its own Main. |
+
+A cleaner picture for a one-line summary:
+
+```
+  Entities          Figure, CompositeFigure, Drawing (interfaces + abstract bases)
+       ↑
+  Use Cases         GroupAction, UngroupAction, ...
+       ↑
+  Adapters          DrawingView, DrawingEditor, ButtonFactory, XML serialisation
+       ↑
+  Frameworks        Swing, sample app Main classes, jhotdraw-api app-shell
+```
+
+The arrows point *inward* — every outer ring depends on the inner ring's abstractions, not the reverse. `Figure` does not import `JComponent`; `GroupAction` does not import `JButton`; `DefaultDrawingView` knows about both `Figure` (inward) and `JComponent` (outward).
+
+#### Where JHotDraw obeys the Dependency Rule
+
+- **Actions never touch Swing.** `GroupAction` imports `java.awt.event.ActionEvent` (a JDK abstraction) and `javax.swing.undo.*` (an undo framework) but no concrete Swing widget. The Action is reusable in any UI that triggers an `ActionEvent`.
+- **The `Figure` model has no UI dependencies.** A grep for `javax.swing` inside [`jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/`](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/) returns essentially nothing. Figures know how to draw themselves into a `Graphics2D` (an AWT primitive, not a Swing component) but do not know about toolbars or palettes.
+- **`jhotdraw-api` is a stable inner module.** It declares the application-shell abstractions; every concrete application implements them. The dependency arrow points into the api module, not out of it.
+
+#### Where the Dependency Rule is bent
+
+Three honest observations:
+
+1. **The core drawing interfaces are in the wrong module.** A strict Clean Architecture would put `Figure`, `Drawing`, `DrawingView`, `Tool`, `Handle` into `jhotdraw-api` (the Entities ring), separated from the `AbstractFigure`, `DefaultDrawing`, `DefaultDrawingView` implementations in `jhotdraw-core` (which would then be Use Cases + Adapters). In the actual repository, interfaces and implementations are co-located in `jhotdraw-core`. The framework still compiles cleanly because the implementations sit *below* the interfaces in the file system — but a hypothetical second implementation cannot drop in without dragging `jhotdraw-core` along.
+2. **`DefaultDrawingView` is `JPanel`.** [`DefaultDrawingView`](jhotdraw-core/src/main/java/org/jhotdraw/draw/DefaultDrawingView.java) extends `javax.swing.JPanel` — the Interface Adapter ring borrows from the Frameworks & Drivers ring. This is a pragmatic Swing choice (it makes the view directly mountable inside any Swing container) but it means the view layer is not truly framework-independent. Porting JHotDraw to JavaFX or a web canvas would require rewriting every `DrawingView` implementation.
+3. **No explicit Boundary / Presenter / ViewModel split.** JHotDraw is structured as classical MVC, not as Clean Architecture's Request-Model / Response-Model / Boundary-interface flow. Actions invoke methods on the model directly; there are no input-boundary interfaces between the menu click and the Action. For a desktop drawing framework this is acceptable — the cost of formalising boundaries would exceed the benefit — but it is a real architectural difference from the Clean Architecture reference diagram.
+
+#### Successful-architecture checklist
+
+Against Martin's four characteristics from Lecture 5.4:
+
+| Characteristic | JHotDraw status | Comment |
+|---|---|---|
+| **Testable** | Partial | The Figure / Drawing model is testable in isolation (no Swing required for `groupFigures`), but the actual test coverage is two files in the whole repository — the *architecture* permits testing; the *team* did not exploit it. |
+| **Independent of UI** | Mostly yes | The model classes do not depend on Swing. The view classes do. A different UI toolkit could reuse `Figure` / `Drawing` directly. |
+| **Independent of database** | N/A → yes | JHotDraw does not have a database; persistence is via XML through [`jhotdraw-xml/`](jhotdraw-xml/). The serialisation layer is cleanly separated from the model. |
+| **Independent of frameworks** | Partial | The Action layer is reusable across any `ActionEvent`-driving UI; the View layer is locked to Swing. |
+
+---
+
+### Findings
+
+**1. SOLID + Clean Architecture explain the framework's extensibility.**
+The four extension points the SVG and ODG samples exercise — pluggable `GroupFigure` prototypes, pluggable `Layouter` strategies, pluggable `Tool` instances, pluggable `Handle` factories — are *all* DIP applications. The framework's much-praised extensibility (Lecture 2.4) is not a separate feature; it is the natural consequence of obeying DIP at the model layer.
+
+**2. The biggest SOLID violation is also the one I refactored in Lab 4.**
+`GroupAction`'s `isGroupingAction` boolean flag violates SRP (two responsibilities in one class) and OCP (cannot add a third "mode" without modifying the class) simultaneously. The Lab 4 *Compose Method* refactoring tackled the readability symptom; the underlying design violation is still there, and the deferred *Replace Conditional with Polymorphism* would fix it. This is direct empirical evidence for the lecture's claim that "DIP tells us how to obey OCP": both are violated by the same flag, and both would be fixed by the same refactoring.
+
+**3. The Clean Architecture *intent* is honoured; the *module boundaries* are not.**
+The dependency graph (Figure → Action → View → App) flows correctly inward at the code level. But the Maven module names suggest a layering (`jhotdraw-api` ⊃ `jhotdraw-core` ⊃ `jhotdraw-gui` ⊃ `jhotdraw-app`) that is not actually implemented in full: the core drawing abstractions are in `jhotdraw-core`, not `jhotdraw-api`, and the Swing dependency leaks into the adapter layer via `DefaultDrawingView extends JPanel`. A reader expecting strict Clean Architecture would be initially mis-aligned.
+
+**4. The LSP violations are concentrated in dead-end tools.**
+The classes that throw `UnsupportedOperationException` are mostly half-implemented features (`TextEditingTool`, `TextAreaEditingTool`, `DefaultDrawingViewTransferHandler.exportToClipboard`). LSP is therefore a useful *prioritisation* tool: each violation marks a spot in the codebase where someone started a feature, ran out of time, and left a runtime trap. The portfolio's Postfactoring step in a future lab could productively start from these locations.
+
+**5. The Composite Reuse Principle is mostly obeyed — but with one notable exception.**
+`UngroupAction extends GroupAction` is the one place in the Group/Ungroup feature where inheritance is used as a reuse mechanism rather than because `UngroupAction` *is-a* `GroupAction`. By CRP this should be delegation: an `UngroupAction` would hold a reference to a `GroupAction` and forward to its `ungroupFigures` method. The current inheritance gives a tiny code saving (one constructor flips a flag) but couples the two classes for the rest of time. This is the same observation as the deferred refactoring in Lab 4 — and shows CRP and SOLID converging on the same redesign.
+
+---
+
+### Summary
+
+Lab 5 produced two artefacts:
+
+1. **A per-principle SOLID map** of the Group / Ungroup neighbourhood: positive example + violation for each of S, O, L, I, D, plus the CRP relationship between `UngroupAction` and `GroupAction`. Five concrete violations are identified, with file:line references where applicable, all of them concentrated in the same ~10 classes that the Lab 3b impact set identified.
+2. **A Clean Architecture mapping** of the nine Maven modules onto Martin's four rings, with three explicit deviations from the Dependency Rule documented (interface co-location in `jhotdraw-core`, `JPanel` leak into the adapter layer, absence of formal Boundaries).
+
+Putting Labs 2–5 together, the picture of the Group / Ungroup feature is now complete enough to plan an actualization step responsibly:
+
+- Concept-located (Lab 2): 8 core classes.
+- Impact-analysed (Lab 3b): 27 classes across 11 packages.
+- Pre-factored (Lab 4): three Fowler / Kerievsky refactorings applied; three larger ones deferred pending test coverage.
+- Principle-mapped (Lab 5): SOLID violations catalogued; Clean Architecture mapping documented.
+
+The lab handout's actualization framing is therefore satisfied by *documenting the readiness* rather than by writing new feature code: a hypothetical "add a Cluster command" feature now has a known impact set, a known prefactoring baseline, and a known set of design constraints (SOLID + Clean Architecture) the implementation must respect. That, on a real team, is the artefact a tech lead would gate the next sprint on — which is the spirit of the Actualization phase the lecture defined.
