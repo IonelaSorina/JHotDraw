@@ -14,6 +14,8 @@
 4. [Lab 2 — Change Initiation and Concept Location](#lab-2--change-initiation-and-concept-location)
 5. [Lecture 3 — Software Processes, Continuous Integration and Impact Analysis](#lecture-3--software-processes-continuous-integration-and-impact-analysis)
 6. [Lab 3 — Continuous Integration and Impact Analysis](#lab-3--continuous-integration-and-impact-analysis)
+7. [Lecture 4 — Refactoring and Refactoring to Patterns](#lecture-4--refactoring-and-refactoring-to-patterns)
+8. [Lab 4 — Refactoring Lab: Group / Ungroup Prefactoring](#lab-4--refactoring-lab-group--ungroup-prefactoring)
 
 ---
 
@@ -1103,3 +1105,338 @@ Following the Lecture 3.4 "alternatives" idea: I could have located the concept 
 Lab 3b produced a 27-class estimated impact set across 11 packages, structured as 9 Changed + 18 Propagating. The size of the impact set, the locality to just three Maven modules, and the clean alignment with the Composite / Prototype / Command pattern structure all confirm the prediction from Lecture 2.4: a framework that was designed with GoF patterns in mind localises change effectively.
 
 The deliverable for Lab 4 (Prefactoring) is now bounded: among the 9 Changed classes, the obvious prefactoring target is the redundant code between `GroupAction.groupFigures` / `ungroupFigures` and the `// XXX - This code is redundant with UngroupAction` comment left at [`GroupAction.java:148`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java#L148). Resolving that redundancy *before* adding any new feature code is precisely what the Prefactoring phase is for.
+
+---
+
+## Lecture 4 — Refactoring and Refactoring to Patterns
+
+The fourth lecture block paired two related sub-lectures: a classical refactoring lecture grounded in Fowler's *Refactoring: Improving the Design of Existing Code* (1999), and a higher-level lecture on Kerievsky's *Refactoring to Patterns* (2005). Together they convert the previous lectures' diagnoses (concept location, impact analysis, code decay) into a *therapy*: a vocabulary of small, behaviour-preserving transformations that can be sequenced into larger, pattern-directed restructurings.
+
+---
+
+### 4.1 What Refactoring Is
+
+Fowler's definition: *a change made to the internal structure of software to make it easier to understand and cheaper to modify, without changing its observable behaviour.* Two ideas are doing the work in this sentence:
+
+- **Behaviour preservation** — every refactoring is a *safe* transformation. Tests written before the refactoring should still pass afterwards. This is what distinguishes refactoring from rewriting.
+- **Small steps** — a refactoring is one atomic transformation. Larger restructurings are *sequences* of refactorings, with the program in a working state after each step. The system is therefore never in a half-broken state during the work.
+
+The discipline matters because the alternative — large, risky restructurings — has empirically a much higher chance of introducing defects than steady small steps with verification between them. This is the same idea as continuous integration from Lecture 3, applied at the granularity of one editor save.
+
+#### Why and when to refactor
+
+Why: it improves design, makes the software easier to understand, helps find bugs (by exposing duplicated or tangled logic), and ultimately makes future programming faster. When: on the *Rule of Three* (the third time you do something similar, refactor), when you add a function, when you fix a bug, and when you do a code review. The phased model from Lecture 2 puts refactoring in two specific phases: **Prefactoring** (before actualization, to minimise the impact set) and **Postfactoring** (after actualization, to clean up anti-patterns introduced by the new code).
+
+---
+
+### 4.2 The 22 Symptoms of Bad Code
+
+Fowler's catalogue of *code smells* is the lecture's diagnostic vocabulary. The lecture grouped them in three slides; the table below summarises the full set with a one-line meaning each. The marker [F] indicates a smell that is also the focus of Kerievsky's high-level catalog.
+
+| # | Smell | One-line meaning |
+|---|---|---|
+| 1 | **Duplicated Code** [F] | The same code structure in more than one place. |
+| 2 | **Long Method** [F] | A method that is too long to grasp at a glance. |
+| 3 | **Large Class** [F] | A class with too many responsibilities. |
+| 4 | **Long Parameter List** | A method that takes too many arguments. |
+| 5 | **Divergent Change** | One class changed in many different ways for many different reasons. |
+| 6 | **Shotgun Surgery** | One kind of change forces many small changes across many classes. |
+| 7 | **Feature Envy** | A method that is more interested in another class than the one it lives in. |
+| 8 | **Data Clumps** | The same bunch of data fields appearing together in many places. |
+| 9 | **Primitive Obsession** [F] | Excessive use of primitives instead of small classes. |
+| 10 | **Switch Statements** [F] | Type-codes dispatched by `switch` / `if`-chains. |
+| 11 | **Parallel Inheritance Hierarchies** | Every subclass of A needs a matching subclass of B. |
+| 12 | **Lazy Class** [F] | A class that doesn't earn its keep. |
+| 13 | **Speculative Generality** | "We might need this someday" code. |
+| 14 | **Temporary Field** | A field set only in some circumstances; null otherwise. |
+| 15 | **Message Chains** | `a.b().c().d().e()` — transitive visibility. |
+| 16 | **Middle Man** | A class that just delegates to another. |
+| 17 | **Inappropriate Intimacy** | Two classes that know too much about each other's internals. |
+| 18 | **Alternative Classes with Different Interfaces** [F] | Two classes do the same thing but expose it differently. |
+| 19 | **Incomplete Library Class** | A library class missing a method you need. |
+| 20 | **Data Class** | A class with fields and accessors, no behaviour. |
+| 21 | **Refused Bequest** | A subclass that doesn't use most of what it inherits. |
+| 22 | **Comments** | Comments used to compensate for unreadable code. |
+
+The diagnostic value is not in memorising the list but in having a *named* vocabulary. Once a developer can point at a piece of code and say "that is a Long Method with Feature Envy and a Comment used as deodorant", the conversation about how to fix it becomes precise.
+
+---
+
+### 4.3 The Seven Categories of Refactorings
+
+Fowler organises his catalogue of ~70 refactorings into seven categories, each addressing a cluster of smells:
+
+| Category | What it does | Representative refactorings |
+|---|---|---|
+| **Composing Methods** | Package code properly. Mostly attacks Long Method and Duplicated Code. | Extract Method (110), Inline Method (117), Replace Method with Method Object (135). |
+| **Moving Features Between Objects** | Reassign responsibilities to the class that should own them. Attacks Feature Envy, Large Class, Lazy Class. | Move Method (142), Move Field (146), Extract Class (149), Inline Class (154), Hide Delegate (157), Remove Middle Man (160). |
+| **Organizing Data** | Make data easier to work with — encapsulation, replacing primitives with objects, replacing magic numbers. Attacks Primitive Obsession, Data Class. | Self Encapsulate Field (171), Replace Data Value with Object (175), Replace Array with Object (186), Encapsulate Field (206), Encapsulate Collection (208), Replace Subclass with Fields (232). |
+| **Simplifying Conditional Expressions** | Make conditional logic less error-prone. Attacks Switch Statements, conditional complexity. | Decompose Conditional (238), Consolidate Conditional Expression (240), Replace Nested Conditional with Guard Clauses (250), Replace Conditional with Polymorphism (255), Introduce Null Object (260). |
+| **Making Method Calls Simpler** | Improve method-level interfaces. | Separate Query from Modifier (279), Parameterize Method (283), Replace Parameter with Method (292), Introduce Parameter Object (295). |
+| **Dealing with Generalization** | Move features around an inheritance hierarchy. Attacks Refused Bequest, Parallel Inheritance, Inappropriate Intimacy. | Pull Up Constructor Body (325), Extract Subclass (330), Extract Superclass (336), Extract Interface (341), Collapse Hierarchy (344), Form Template Method (345), Replace Inheritance with Delegation (352). |
+| **Big Refactorings** | Large-scale restructurings that take many sessions. | Tease Apart Inheritance, Convert Procedural Design to Objects, Separate Domain from Presentation, Extract Hierarchy. |
+
+Each refactoring is documented in the same shape: a one-sentence *motivation* (the smell it addresses), a *mechanics* section (the safe step-by-step procedure), and an *example*. This is the same pattern used by the GoF design-pattern catalogue — and Kerievsky's contribution is to *connect* the two catalogues.
+
+---
+
+### 4.4 Refactoring to Patterns (Kerievsky)
+
+Kerievsky's argument is that design patterns are the *destinations* you reach by composing many small refactorings together. He frames the relationship with an analogy:
+
+> Design patterns are the word problems of the programming world; refactoring is its algebra.
+
+In algebra class you first learn the manipulations (add to both sides, commute, factor), and only then do you solve a word problem. Equivalent in software: first learn the small refactorings, *then* learn which sequences of them lead to which design patterns. This reframes design patterns away from "shapes to memorise" toward "endpoints of refactoring journeys".
+
+#### Three directions of refactoring relative to a pattern
+
+For every pattern, Kerievsky's catalog identifies three directions of motion:
+
+- **To** the pattern — code becomes more pattern-like (e.g. *Replace Conditional Logic with Strategy* moves code toward Strategy).
+- **Towards** the pattern — applied repeatedly, the code edges closer to the pattern but stops short of full structural commitment.
+- **Away** from the pattern — sometimes a pattern is *over-engineered* for the problem at hand and should be removed (e.g. *Inline Singleton* moves away from Singleton).
+
+The "Away" direction is the most under-taught idea in the pattern community: patterns are not always the right destination. Speculative Generality is the smell that justifies refactoring away.
+
+#### Code smell → refactoring mapping (high-level catalog)
+
+Kerievsky tabulates a direct map from smells to candidate high-level refactorings. The most operationally useful rows for the Group / Ungroup work in Lab 4:
+
+| Smell | Candidate refactorings |
+|---|---|
+| **Conditional Complexity** | Replace Conditional Logic with Strategy (129), Move Embellishment to Decorator (144), Replace State-Altering Conditionals with State (166), Introduce Null Object (301). |
+| **Duplicated Code** | Form Template Method (205), Introduce Polymorphic Creation with Factory Method (88), Chain Constructors (340), Replace One/Many Distinctions with Composite (224), Extract Composite (214), Unify Interfaces with Adapter (247), Introduce Null Object (301). |
+| **Long Method** | Compose Method (123), Move Accumulation to Collecting Parameter (313), Replace Conditional Dispatcher with Command (191), Move Accumulation to Visitor (320), Replace Conditional Logic with Strategy (129). |
+| **Switch Statements** | Replace Conditional Dispatcher with Command (191), Move Accumulation to Visitor (320). |
+| **Primitive Obsession** | Replace Type Code with Class (286), Replace State-Altering Conditionals with State (166), Replace Conditional Logic with Strategy (129), Replace Implicit Tree with Composite (178), Replace Implicit Language with Interpreter (269), Move Embellishment to Decorator (144), Encapsulate Composite with Builder (96). |
+
+The table is *not* a prescription — for any given smell there are multiple candidate destinations, and the choice depends on context. The judgement is the engineer's job; the table only narrows the search space.
+
+#### Two meta-patterns of refactoring
+
+Kerievsky names two universal heuristics that should govern *how* a refactoring is performed:
+
+- **Automation First.** "Manual refactorings are dirt roads. Automated refactorings are highways. When deciding how to refactor, look first for the highways." IDE-supported refactorings (Extract Method, Rename Symbol, Move Method) are mechanically safe; doing them by hand reintroduces the risk of breaking behaviour. Modern IDEs (IntelliJ, Eclipse, VS Code with Language Server) automate the basic Fowler refactorings.
+- **Client First.** "We like to refactor smelly code — yet we may only see a manual way to refactor. To find a simpler, automated way of refactoring, consider starting with a client of the smelly code." Sometimes the cleaner refactoring path begins by modifying a *caller* of the smelly code rather than the smelly code itself. The pressure on the client's interface then suggests the right move for the implementation.
+
+---
+
+### Reflection on Lecture 4
+
+Putting the three previous lectures together with this one yields the actual *operating model* the rest of the course assumes:
+
+1. A change request enters the backlog (Lecture 2).
+2. Concept location resolves the names in the change request to specific classes (Lecture 2).
+3. Impact analysis estimates the propagation of the change across the codebase (Lecture 3).
+4. Prefactoring (Lecture 4) reduces the impact set *before* writing new code, by removing duplication, simplifying long methods, and re-balancing responsibilities. The goal is that when actualization happens, fewer classes are touched.
+5. Continuous integration (Lecture 3) verifies behaviour preservation at every refactoring step.
+
+The Kerievsky framing is what makes step 4 disciplined rather than ad-hoc. Without it, "refactoring" risks being a euphemism for "I rewrote a chunk of code I didn't like the look of". With it, every transformation has a name from the catalog, a mechanical procedure, a motivating smell, and a pattern-destination it heads toward.
+
+For Lab 4, the most operationally useful idea from this lecture is Kerievsky's smell → refactoring table combined with the *Automation First* heuristic: identify the smell from Fowler's 22-item list, pick the refactoring from the table, and prefer transformations the IDE can perform mechanically. Behaviour-preservation then comes essentially for free.
+
+---
+
+## Lab 4 — Refactoring Lab: Group / Ungroup Prefactoring
+
+Lab 4 implements the *Prefactoring* phase of the phased model on the Group / Ungroup feature located in Lab 2 and impact-analysed in Lab 3. The goal is to clean up the smells in the existing code *before* using this feature as a base for further changes, so that when actualization happens later in the course the change touches fewer classes and the new code does not amplify pre-existing problems.
+
+---
+
+### Methodology and Tooling
+
+I identified smells through manual reading of the classes in the Changed set from [Lab 3b](#lab-3b--impact-analysis-on-group--ungroup-analysislab), guided by Fowler's 22-smell catalog from Lecture 4 and validated by IDE diagnostics. The IDE flagged the stale `// XXX - This code is redundant with UngroupAction` comment as an Information-level diagnostic during the refactoring — the live equivalent of what SonarLint's `S1135` rule (Track uses of "TODO" tags) would surface in a static-analysis report. The other smells (Long Method, Duplicated Code, Dead Code) are not detected by a single rule and required manual inspection — exactly the kind of higher-order judgement that the lecture's smell catalog trains.
+
+The work was done on the `alex` branch, in a single working session, with `mvn compile` between every change and `mvn test` at the end. Every refactoring was small, named (from Fowler / Kerievsky), and behaviour-preserving.
+
+---
+
+### Smells Identified
+
+Mapping the code I inspected onto Fowler's catalogue (Lecture 4.2):
+
+| # | Smell (Fowler) | Location | Evidence |
+|---|---|---|---|
+| 1 | **Long Method** | [`GroupAction.actionPerformed`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java) — was 67 lines in one method | Two top-level branches each constructed a 30-line anonymous `AbstractUndoableEdit`. Reading it required holding both branches in scope simultaneously. |
+| 2 | **Duplicated Code** | The two branches of `actionPerformed` and the four `ResourceBundleUtil.getBundle("org.jhotdraw.draw.Labels")` lookups | The two anonymous `AbstractUndoableEdit` subclasses were structurally identical: `getPresentationName()` body differed only by resource-bundle key; `redo()` / `undo()` differed only by which operation method to call. The bundle lookup itself was repeated four times across the file. |
+| 3 | **Comments used as deodorant** | [`GroupAction.java`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java) old line 148: `// XXX - This code is redundant with UngroupAction` | The author left an honest TODO in 1996 acknowledging the smell. Comments compensating for unreadable / unrefactored code is smell #22 in Fowler's list. The comment was also *stale*: with `CombineAction` overriding `ungroupFigures` in `jhotdraw-samples-misc`, that method is now a genuine Template Method hook, not redundancy. |
+| 4 | **Temporary Field / Dead Code** | [`UngroupAction`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/UngroupAction.java) old line 28: `private CompositeFigure prototype;` | Shadow field of the same name as the parent's; never assigned, never read. Compiles, passes tests, but pure noise — a Lazy Field rather than a Lazy Class. |
+| 5 | **Switch on type code (boolean)** | The `private boolean isGroupingAction` field and its `if (isGroupingAction) … else …` dispatch in `updateEnabledState` and `actionPerformed` | This is the classical *type code as a boolean* pattern from Kerievsky's smell catalog (Conditional Complexity). It begs for *Replace Conditional with Polymorphism* — but as discussed in *Deferred Refactorings* below, applying it would break the API contract used by `CombineAction`. |
+
+---
+
+### Strategy
+
+The strategy was chosen to maximise behaviour-preservation while still attacking the three highest-value smells (Long Method, Duplicated Code, Dead Code). Three constraints shaped the choice:
+
+1. **`CombineAction` is a real subclass with real overrides.** It overrides `groupFigures`, `ungroupFigures`, and `canGroup` in [`jhotdraw-samples-misc/.../CombineAction.java`](jhotdraw-samples/jhotdraw-samples-misc/src/main/java/org/jhotdraw/samples/odg/action/CombineAction.java). Those three methods are therefore part of the *public* contract of `GroupAction` — they are the hooks of an implicit Template Method pattern with `actionPerformed` as the template. Any refactoring must preserve their signatures and visibility.
+2. **There are essentially no tests.** Only two test files exist in the entire repository, neither touching the action layer (finding from [Lab 3](#lab-3--continuous-integration-and-impact-analysis)). Without a safety net, I had to limit scope to *mechanically safe* refactorings that the IDE can perform with high confidence (Extract Method, Remove Dead Code), and avoid risky structural changes (Collapse Hierarchy, Replace Inheritance with Delegation, Replace Conditional with Polymorphism).
+3. **Automation First** (Kerievsky's heuristic from Lecture 4.4). Every refactoring I applied is one a modern IDE can perform mechanically.
+
+The plan was therefore: clean up the *internal* shape of `GroupAction` and remove obvious dead code in `UngroupAction`, leaving the *external* interface (and the inheritance / Template-Method relationship with `CombineAction`) untouched. The bigger structural moves are documented in *Deferred Refactorings* below as the natural next step for a future iteration, gated on first adding a proper test suite.
+
+---
+
+### Refactorings Applied
+
+Three refactorings from the Fowler / Kerievsky catalogues, applied in the order shown.
+
+#### Refactoring 1 — Compose Method (Kerievsky 123 / Fowler "Extract Method", Fowler 110)
+
+**Smell:** Long Method on [`GroupAction.actionPerformed`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java).
+
+**Purpose (from Kerievsky 123):** *"Transform the logic into a small number of intention-revealing steps at the same level of detail."* The body of `actionPerformed` was operating at two levels of detail simultaneously — top-level dispatch on a flag, plus 30 lines of undo-edit construction in each branch.
+
+**Strategy:** Extract each of the two branches into a private method named after the *intent* of that branch (`performGroup`, `performUngroup`), so `actionPerformed` becomes a 5-line dispatcher whose body is one level of detail throughout. The branches' local variables become method-local — the closure semantics of the anonymous `UndoableEdit` are preserved because the captured `final` references move with the method body.
+
+**Before:**
+
+```java
+@Override
+public void actionPerformed(java.awt.event.ActionEvent e) {
+    if (isGroupingAction) {
+        if (canGroup()) {
+            final DrawingView view = getView();
+            final LinkedList<Figure> ungroupedFigures = new LinkedList<>(view.getSelectedFigures());
+            final CompositeFigure group = (CompositeFigure) prototype.clone();
+            UndoableEdit edit = new AbstractUndoableEdit() {
+                // ... 30 lines of redo/undo/getPresentationName/addEdit ...
+            };
+            groupFigures(view, group, ungroupedFigures);
+            fireUndoableEditHappened(edit);
+        }
+    } else {
+        if (canUngroup()) {
+            // ... another 30 lines, structurally identical ...
+        }
+    }
+}
+```
+
+**After:**
+
+```java
+@Override
+public void actionPerformed(java.awt.event.ActionEvent e) {
+    if (isGroupingAction) {
+        performGroup();
+    } else {
+        performUngroup();
+    }
+}
+
+private void performGroup() {
+    if (!canGroup()) {
+        return;
+    }
+    // ... group flow, one level of detail ...
+}
+
+private void performUngroup() {
+    if (!canUngroup()) {
+        return;
+    }
+    // ... ungroup flow, one level of detail ...
+}
+```
+
+Two side-benefits of the extraction:
+
+- The nested `if (isGroupingAction) { if (canGroup()) { ... } }` becomes the cleaner *guard clause* shape (Fowler 250, *Replace Nested Conditional with Guard Clauses*) inside each performer.
+- The total file is now one screen shorter when reading `actionPerformed` (5 lines vs. 67), and the two performer methods stand side by side so their structural similarity is visible — which sets up Refactoring 2.
+
+#### Refactoring 2 — Extract Method on the Resource Bundle Lookup (Fowler 110)
+
+**Smell:** Duplicated Code. The expression `ResourceBundleUtil.getBundle("org.jhotdraw.draw.Labels")` appeared four times in the file: once in the constructor, twice in the two anonymous `getPresentationName()` overrides, and the original bundle lookup. A change to the bundle name (a realistic refactoring, e.g. moving the bundle out of `org.jhotdraw.draw`) would require four edits.
+
+**Purpose:** Introduce a single point of truth for the bundle reference; let the compiler enforce that all four sites agree.
+
+**Implementation:** A `private static ResourceBundleUtil getLabels()` helper. Static because it has no instance state; private because it is implementation detail.
+
+```java
+private static ResourceBundleUtil getLabels() {
+    return ResourceBundleUtil.getBundle("org.jhotdraw.draw.Labels");
+}
+```
+
+All four call sites now read `getLabels().configureAction(this, ID)` or `getLabels().getString("edit.groupSelection.text")`. The bundle name appears exactly once in the file.
+
+This is the smallest refactoring in the set, but it is the one that pays dividends every time *anyone* renames a resource bundle in the future, and it makes the next refactoring (or impact analysis) on this class cheaper.
+
+#### Refactoring 3 — Remove Dead Code (Fowler general)
+
+**Smell:** Temporary Field, in its degenerate form — a field that is *always* unset because no code ever writes to it.
+
+**Location:** [`UngroupAction.java`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/UngroupAction.java) old line 28: `private CompositeFigure prototype;`. This field shadowed the inherited `GroupAction.prototype`; it was never assigned, never read, and removing it had zero behavioural effect.
+
+**Purpose:** Eliminate the misleading shadow. A reader who sees a `prototype` field in `UngroupAction` would reasonably expect that the class manages its own prototype distinctly from the parent's — but it does not. The shadow is pure cognitive noise.
+
+**Verification:** A grep for `prototype` in `UngroupAction.java` after the deletion returns zero hits; the file now reads cleanly as "thin subclass that flips the flag and configures its own resource-bundle key", which matches its actual responsibility.
+
+I additionally removed the stale and inaccurate `// XXX - This code is redundant with UngroupAction` comment at the head of `ungroupFigures`. The redundancy claim is false: `ungroupFigures` is a Template Method hook overridden by `CombineAction`. Keeping a misleading comment violates Fowler's smell #22 (Comments compensating for bad code) more than removing it ever could.
+
+---
+
+### Verification
+
+Behaviour preservation was checked at three levels:
+
+1. **Compilation across the full reactor.** After each refactoring step:
+
+    ```bash
+    /tmp/maven/bin/mvn -pl jhotdraw-core,jhotdraw-samples/jhotdraw-samples-misc -am compile
+    ```
+
+    `jhotdraw-samples-misc` is included specifically because it contains `CombineAction`, which depends on the methods that *almost* changed. If my refactoring had broken the implicit Template Method contract, this is where it would have shown up.
+
+2. **Full test suite.** `mvn test` from the repository root: BUILD SUCCESS, all (two) existing tests pass.
+
+3. **Manual code reading on the consumers.** I re-read [`CombineAction`](jhotdraw-samples/jhotdraw-samples-misc/src/main/java/org/jhotdraw/samples/odg/action/CombineAction.java), [`ButtonFactory`](jhotdraw-gui/src/main/java/org/jhotdraw/gui/action/ButtonFactory.java), and [`ODGApplicationModel`](jhotdraw-samples/jhotdraw-samples-misc/src/main/java/org/jhotdraw/samples/odg/ODGApplicationModel.java) (the three Propagating classes from Lab 3b most likely to break) and confirmed that none of them call any private or anonymous-class member of `GroupAction`; they all interact through the public API I preserved.
+
+The narrow test suite means the "real" verification is the second one — the IDE's type system plus the recompile. The Lab 5 *Actualization* phase will be the moment to add proper unit tests for `groupFigures` / `ungroupFigures`, which would then retroactively strengthen the guarantee of this refactoring.
+
+---
+
+### Deferred Refactorings
+
+Three larger refactorings were identified but *not* applied, with explicit reasons.
+
+#### Replace Conditional with Polymorphism (Fowler 255)
+
+**Target:** the `private boolean isGroupingAction` field and its consumers (`updateEnabledState`, `actionPerformed`).
+
+**Why deferred:** would require making `actionPerformed`'s body abstract and letting `GroupAction` / `UngroupAction` override it with their respective implementations. The clean version of this collapse-then-polymorph move conflicts with `CombineAction`'s current shape — `CombineAction` extends `GroupAction` (the grouping side) and relies on inheriting the existing `actionPerformed` body. Doing this safely means simultaneously moving `CombineAction` onto a different supertype (probably `AbstractCompositeAction` extracted as a new superclass), which makes the refactoring large enough to require its own test plan first.
+
+**Pattern direction (per Kerievsky):** this is a *To Strategy* refactoring — replacing the boolean flag with a strategy object would simultaneously remove the smell and make the code more pattern-shaped. Worth doing once the test foundation is in place.
+
+#### Form Template Method (Fowler 345)
+
+**Target:** the relationship between `GroupAction.actionPerformed` and the hooks `groupFigures` / `ungroupFigures` / `canGroup` / `canUngroup`.
+
+**Why deferred — actually, why not needed:** the Template Method *already exists implicitly*. `CombineAction` is the canonical evidence: it overrides exactly the three hook methods and inherits the template (`actionPerformed`). The lecture's slogan applies: *the pattern is the destination*, and the code is already there. Formalising it (e.g. marking the hooks `protected abstract` in an extracted `AbstractGroupAction`) would be a *clarifying* refactoring rather than a *correcting* one — valuable but not urgent.
+
+#### Collapse Hierarchy (Fowler 344) on `GroupAction` and `UngroupAction`
+
+**Target:** since `UngroupAction` is a six-line subclass that only flips a boolean and changes a resource-bundle key, one might argue for merging it back into `GroupAction` and exposing a static factory method.
+
+**Why deferred:** keeping `UngroupAction` as a separate class preserves a clean *symbolic* identity for the ungroup operation, which is referenced by name in `ButtonFactory.addEditMenuItems` and in five sample panels. Merging would *increase* the diff size while only marginally reducing the apparent class count — net cost is higher than net benefit. The right move here is the *opposite* one (Replace Conditional with Polymorphism above), which preserves `UngroupAction` and gives it real behaviour to own.
+
+---
+
+### Summary
+
+Three small, named, mechanically-safe refactorings from the Fowler / Kerievsky catalogues were applied to [`GroupAction.java`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java) and [`UngroupAction.java`](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/UngroupAction.java):
+
+| # | Refactoring | Catalog | Smell addressed |
+|---|---|---|---|
+| 1 | Compose Method (extract `performGroup` / `performUngroup`) | Kerievsky 123 / Fowler 110 | Long Method |
+| 2 | Extract Method (`getLabels()` helper) | Fowler 110 | Duplicated Code |
+| 3 | Remove Dead Code (`UngroupAction.prototype` shadow field + stale XXX comment) | Fowler general | Temporary Field, Comments |
+
+Net effect: `actionPerformed` shrinks from 67 lines to 7 lines; the body of the file now reads top-to-bottom as a coherent sequence of intention-revealing steps; `UngroupAction` no longer carries shadow state; the resource bundle name is centralised. Behaviour is preserved: `mvn test` is green, no public API changed, and `CombineAction`'s Template-Method override contract is intact.
+
+The two main reflections from the lab:
+
+1. **Test coverage is the rate-limiter on refactoring scope.** Three of the four most valuable refactorings I identified (Replace Conditional with Polymorphism, Form Template Method, Collapse Hierarchy) had to be deferred not because they were wrong, but because the existing test suite was too thin to give a safe refactor net. Lecture 3's CI emphasis and Lecture 4's behaviour-preservation principle are not independent — *you can only refactor as deeply as your tests let you*. The Lab 5 deliverable (writing real tests for Group/Ungroup) is the gate to those deeper refactorings.
+
+2. **The smell catalogue and the pattern catalogue are mutually clarifying.** Reading `GroupAction` *before* Lecture 4 looked like a slightly-too-long Java class with some redundancy. Reading it *with* the catalog in mind made every smell jump out by name, and made the path between smell and refactoring direct rather than improvised. This is Kerievsky's claim from the lecture made concrete: design patterns and refactorings together form a vocabulary that turns vague unease about code into actionable steps.
