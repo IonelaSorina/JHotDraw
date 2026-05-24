@@ -241,6 +241,7 @@ public class TextFigure extends AbstractAttributedDecoratedFigure
 
     @Override
     public void setFontSize(float size) {
+        assert size > 0 : "font size must be positive, got: " + size;
         set(FONT_SIZE, new Double(size));
     }
 

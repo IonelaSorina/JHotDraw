@@ -23,6 +23,9 @@ class TextUndoableEdit extends AbstractUndoableEdit {
     private final String newText;
 
     TextUndoableEdit(TextHolderFigure figure, String oldText, String newText) {
+        assert figure != null : "figure must not be null";
+        assert oldText != null : "oldText must not be null";
+        assert newText != null : "newText must not be null";
         this.figure = figure;
         this.oldText = oldText;
         this.newText = newText;
