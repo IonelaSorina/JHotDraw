@@ -10,11 +10,8 @@ package org.jhotdraw.draw.tool;
 import org.jhotdraw.draw.figure.TextHolderFigure;
 import java.awt.*;
 import java.awt.event.*;
-import javax.swing.undo.AbstractUndoableEdit;
-import javax.swing.undo.UndoableEdit;
 import org.jhotdraw.draw.*;
 import org.jhotdraw.draw.text.*;
-import org.jhotdraw.util.ResourceBundleUtil;
 
 /**
  * A tool to edit figures which implement the {@code TextHolderFigure} interface,
@@ -98,41 +95,14 @@ public class TextEditingTool extends AbstractTool implements ActionListener {
             final String oldText = typingTarget.getText();
             final String newText = textField.getText();
             if (newText.length() > 0) {
-                typingTarget.willChange();
                 typingTarget.setText(newText);
                 typingTarget.changed();
             }
-            UndoableEdit edit = new AbstractUndoableEdit() {
-                private static final long serialVersionUID = 1L;
-
-                @Override
-                public String getPresentationName() {
-                    ResourceBundleUtil labels = ResourceBundleUtil.getBundle("org.jhotdraw.draw.Labels");
-                    return labels.getString("attribute.text.text");
-                }
-
-                @Override
-                public void undo() {
-                    super.undo();
-                    editedFigure.willChange();
-                    editedFigure.setText(oldText);
-                    editedFigure.changed();
-                }
-
-                @Override
-                public void redo() {
-                    super.redo();
-                    editedFigure.willChange();
-                    editedFigure.setText(newText);
-                    editedFigure.changed();
-                }
-            };
-            getDrawing().fireUndoableEditHappened(edit);
+            getDrawing().fireUndoableEditHappened(new TextUndoableEdit(editedFigure, oldText, newText));
             typingTarget.changed();
             typingTarget = null;
             textField.endOverlay();
         }
-        //         view().checkDamage();
     }
 
     @Override
@@ -163,6 +133,5 @@ public class TextEditingTool extends AbstractTool implements ActionListener {
 
     @Override
     public void mouseDragged(MouseEvent e) {
-        throw new UnsupportedOperationException("Not supported yet.");
     }
 }
