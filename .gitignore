@@ -8,3 +8,11 @@ nb-configuration.xml
 *.iml
 AGENTS.md
 FEATURE.md
+CLAUDE.md
+.claude/
+.cursor/
+.cursorignore
+.cursorules
+.aider*
+.copilot/
+.github/copilot*
