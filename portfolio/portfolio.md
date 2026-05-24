@@ -19,6 +19,7 @@
 9. [Lecture 5 — Actualization, OO Principles and Clean Architecture](#lecture-5--actualization-oo-principles-and-clean-architecture)
 10. [Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw](#lab-5--actualization-lab-solid-and-clean-architecture-in-jhotdraw)
 11. [Lecture 6 — Clean Code](#lecture-6--clean-code)
+12. [Lab 7 — Testing Lab: Unit Tests for Group / Ungroup](#lab-7--testing-lab-unit-tests-for-group--ungroup)
 
 ---
 
@@ -2039,3 +2040,308 @@ The clean-code rules also expose two structural problems in JHotDraw that earlie
 2. **JHotDraw uses comments to compensate for unrefactored code in multiple places.** I removed one such comment in Lab 4; the codebase contains others (`// XXX`, `// FIXME`, `// TODO` distributed across `jhotdraw-core`). Each is a Section 6.4-level smell — a marker of code that, by the original author's own admission, wasn't finished. The *Comments Do Not Make Up for Bad Code* rule provides explicit licence to delete these and refactor toward the intent the comment was hinting at.
 
 The single most useful idea from Lecture 6, for the rest of this course's work, is the *Boy Scout Rule*. Every other lecture has been about big moves — phases, impact sets, refactoring sessions, architectural mappings. The Boy Scout Rule is the smallest possible move: *leave each file fractionally cleaner than you found it on each visit.* Done consistently, it does the work of formal refactoring sessions in the background. Done inconsistently, it does the equivalent of code decay in slow motion. Internalising this rule is the deliverable Lecture 6 actually asks for — and it sits underneath every later lab in the programme.
+
+---
+
+## Lab 7 — Testing Lab: Unit Tests for Group / Ungroup
+
+### Objectives
+
+This lab follows the *TestLab1 — Testing* handout. The course objectives are stated plainly: *understand the importance of testing* and *implement unit tests* on the most important domain logic of my chosen feature. The portfolio task itself is one sentence: **"At class level write unit tests of important business functionality of your selected Feature. Document how you have verified your Feature."**
+
+For me that selected feature is, as in every lab since Lab 2, the **Group / Ungroup** action — concretely the trio [GroupAction](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java), [UngroupAction](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/UngroupAction.java), and the figure they operate on, [GroupFigure](jhotdraw-core/src/main/java/org/jhotdraw/draw/figure/GroupFigure.java). The handout's classwork translates into four concrete deliverables:
+
+1. Add the JUnit 4 dependency to the right Maven module.
+2. Write JUnit 4 tests for *best case* scenarios of the most important methods of the feature.
+3. Write tests for *boundary* and *failure* cases — applying mocks/stubs (Mockito) where execution would otherwise escape the unit under test.
+4. Use Java `assert` statements in the production code to enforce invariants — things that *must never happen* — distinct from exceptions, which let the program continue.
+
+This section documents what I did for each.
+
+---
+
+### Environment
+
+| Tool | Version | Purpose |
+|---|---|---|
+| JDK | OpenJDK 25 (Red Hat) | Runs Maven and Surefire forks |
+| Source / target | Java 1.8 | Unchanged from the JHotDraw parent POM |
+| Maven (portable) | 3.9.6 at `/tmp/maven` | Already used in earlier labs |
+| Surefire | 3.2.2 | Auto-detected provider used by JHotDraw |
+| JUnit | **4.13.2** | Added in this lab |
+| Mockito | **4.11.0** | Added in this lab — Mockito 5 requires JDK 11+ source target |
+| TestNG | 6.8.21 | Pre-existing; the two `*NGTest` classes still run |
+
+JUnit 4 was chosen over JUnit 5 *because the handout explicitly says so* — "*Swing and JUnit extensions often works best with JUnit 4*." Since `jhotdraw-core` already depended on TestNG and shipped two `*NGTest` files, I had to confirm both providers would coexist under Surefire. They do — Surefire's TestNG provider includes a JUnit-4 bridge (`org.testng.junit.JUnit4TestRunner`), so the existing TestNG suite and my new JUnit-4 classes are collected together into one report. No Surefire configuration was needed.
+
+Mockito 4.11.0 was the deliberate pick rather than the newer 5.x line: Mockito 5 requires Java 11+ as the *source* target, and the JHotDraw parent POM still compiles to Java 1.8. The 4.x line remains compatible.
+
+---
+
+### Step 1 — Add the test dependencies
+
+The lab's first classwork item: *"Add maven dependency to [JUnit4] if it is not already done."* I edited only [jhotdraw-core/pom.xml](jhotdraw-core/pom.xml) — the module that owns the Group/Ungroup classes — and appended JUnit 4 and Mockito immediately after the existing TestNG dependency, keeping both at `<scope>test</scope>`:
+
+```xml
+<dependency>
+    <groupId>junit</groupId>
+    <artifactId>junit</artifactId>
+    <version>4.13.2</version>
+    <scope>test</scope>
+</dependency>
+<dependency>
+    <groupId>org.mockito</groupId>
+    <artifactId>mockito-core</artifactId>
+    <version>4.11.0</version>
+    <scope>test</scope>
+</dependency>
+```
+
+I deliberately did **not** put these dependencies in the parent POM. The other modules don't need them; keeping scope as narrow as possible avoids forcing test-time dependencies onto modules that don't write tests.
+
+I verified the build still ran the existing TestNG suite before writing any new tests:
+
+```
+/tmp/maven/bin/mvn test -pl jhotdraw-core --no-transfer-progress
+```
+
+→ `Tests run: 2, Failures: 0` from `AbstractFigureNGTest`. Clean baseline.
+
+---
+
+### Step 2 — Decide what to test
+
+The handout warns that *"a unit test should test a single code-path through a single method"*. So the first design decision was *which methods are the important business functionality*. I looked at the Group/Ungroup feature through the lens of Lab 2's concept-location and Lab 4's refactoring and picked five methods:
+
+| Class | Method | Why it matters |
+|---|---|---|
+| `GroupAction` | `canGroup()` | The guard for whether the *Group* menu item is enabled. Wrong answer → broken UX. |
+| `GroupAction` | `canUngroup()` | The guard for *Ungroup*. Also tells us a single non-group figure must *not* be ungroupable. |
+| `GroupAction` | `groupFigures(view, group, figures)` | The core mutator that moves figures into the group and reinserts the group in the drawing. |
+| `GroupAction` | `ungroupFigures(view, group)` | The inverse — moves children back out and removes the group. |
+| `GroupAction` | `actionPerformed(ActionEvent)` | The dispatch path that picks group vs ungroup at runtime (a direct consequence of Lab 4's *Replace Conditional with Polymorphism* refactoring I had to defer). |
+| `UngroupAction` | constructor + dispatch | The subclass exists solely to flip `isGroupingAction` — that wiring is worth pinning. |
+| `GroupFigure` | `isTransformable()` | Pure collective predicate — *the group is transformable iff all children are*. Classic boundary-test target. |
+
+Anything outside this list (e.g. Swing key bindings, label localisation, undo presentation strings) is either GUI infrastructure or framework boilerplate, not business logic.
+
+---
+
+### Step 3 — Apply mocks where execution leaves the unit
+
+The handout's rule 4(a) is the central reason this lab is non-trivial: *"When the execution of a method passes outside of that method, you have a dependency and should apply mocks/stubs to avoid the dependency."*
+
+`GroupAction` depends on three collaborators:
+
+```
+DrawingEditor → DrawingView → Drawing
+                            → CompositeFigure (the group prototype)
+```
+
+Each dependency is a Swing/JHotDraw interface or class. Without mocks I would either need a real `DrawingEditor` (which transitively needs a Swing window, a frame, an event-dispatch thread — all the things the remote terminal cannot provide) or I would be writing integration tests, not unit tests.
+
+I therefore used Mockito to fabricate exactly those three dependencies. The `setUp()` method in [GroupActionTest](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/GroupActionTest.java) wires them together once per test:
+
+```java
+@Before
+public void setUp() {
+    editor   = mock(DrawingEditor.class);
+    view     = mock(DrawingView.class);
+    drawing  = mock(Drawing.class);
+    prototype = new GroupFigure();
+
+    when(editor.getActiveView()).thenReturn(view);
+    when(view.getDrawing()).thenReturn(drawing);
+
+    action = new GroupAction(editor, prototype, true);
+}
+```
+
+One subtlety I hit and want to record: I initially used a **mock `CompositeFigure` as the prototype**, but Mockito cannot stub `Object#getClass()` (it is `final`). `GroupAction.canUngroup()` relies on `selectedFigure.getClass().equals(prototype.getClass())`, so a mocked prototype would have made *every* class-equality check fail. The fix is to use **real `GroupFigure` / `RectangleFigure` instances** specifically where class identity matters, and use mocks everywhere else. This is the kind of trade-off the handout's rule 4(a) hints at without spelling out — *not every dependency can be mocked; some must be real because the method under test asks the JVM about its identity*.
+
+---
+
+### Step 4 — Best-case tests
+
+The handout's rule 3: *"Write JUnit tests for best case scenario."* The two foundational best-case tests:
+
+**`canGroup` happy path.** Two figures selected → grouping is enabled.
+
+```java
+@Test
+public void canGroup_returnsTrue_whenSelectionHasMoreThanOneFigure() {
+    when(view.getSelectionCount()).thenReturn(3);
+
+    assertTrue("two or more selected figures should be groupable",
+            action.canGroup());
+}
+```
+
+**`groupFigures` happy path.** Two figures, sorted, inserted at the index of the lowest one, with the *exact ordering of operations* pinned via Mockito's `InOrder`:
+
+```java
+@Test
+public void groupFigures_clearsSelection_addsGroupAtFirstFigureIndex_andReselectsTheGroup() {
+    CompositeFigure group = mock(CompositeFigure.class);
+    Figure f1 = mock(Figure.class), f2 = mock(Figure.class);
+    List<Figure> figures = Arrays.asList(f1, f2);
+    when(drawing.sort(figures)).thenReturn(new ArrayList<>(figures));
+    when(drawing.indexOf(f1)).thenReturn(4);
+
+    action.groupFigures(view, group, figures);
+
+    InOrder ordered = inOrder(drawing, view, group);
+    ordered.verify(drawing).basicRemoveAll(figures);
+    ordered.verify(view).clearSelection();
+    ordered.verify(drawing).add(4, group);
+    ordered.verify(group).willChange();
+    ordered.verify(group).basicAdd(f1);
+    ordered.verify(group).basicAdd(f2);
+    ordered.verify(group).changed();
+    ordered.verify(view).addToSelection(group);
+}
+```
+
+The *ordering* is itself a non-obvious invariant I learned from Lab 4: if you `addToSelection` before `changed()`, undo history is corrupted. Pinning the order with `inOrder` means a refactor that accidentally reshuffles those calls will fail loudly instead of producing a subtle visual glitch.
+
+The mirror best-case test exists for `ungroupFigures` and is structured identically.
+
+---
+
+### Step 5 — Boundary and failure cases
+
+This is rule 4 of the handout, and where the bulk of the tests live. I categorised the cases by the *kind of input that should provoke a different code path*:
+
+| Method | Boundary input | Expected behaviour |
+|---|---|---|
+| `canGroup` | exactly 1 figure selected | `false` — the most common off-by-one bug here is `>=` instead of `>` |
+| `canGroup` | empty selection | `false` |
+| `canGroup` | no active view at all (`editor.getActiveView() == null`) | `false` — defensive guard, exercised when Draw is launched but no document is open |
+| `canUngroup` | 2+ figures selected | `false` — ungroup requires exactly one |
+| `canUngroup` | empty selection | `false` |
+| `canUngroup` | single figure of the *wrong class* (e.g. a `RectangleFigure`, not a `GroupFigure`) | `false` — this is the class-identity check that forced me away from mock prototypes |
+| `canUngroup` | no active view | `false` |
+| `ungroupFigures` | a group with **zero** children | returns an empty collection; still removes the group from the drawing |
+| `actionPerformed` | grouping action invoked when `canGroup` is false | nothing happens — no `drawing.add`, no `fireUndoableEditHappened` |
+
+The "no active view" cases are interesting precisely because they don't look like edge cases — they are perfectly normal application states (Draw started, no document yet open, a key binding fires the action anyway). A unit test makes the contract explicit; a manual GUI test would never reproduce this reliably.
+
+The empty-children boundary on `ungroupFigures` is the kind of case I would not have thought of without writing it down — *what does "ungroup an empty group" even mean?* The current code does the right thing (returns empty collection, still removes the group), and the test now locks that in.
+
+---
+
+### Step 6 — Production assertions
+
+The handout's rule 5 distinguishes **assertions** from **exceptions**:
+
+> "Assertions should be used to check something that should never happen. Note, an assertion should stop the program from running, but an exception should let the program continue running."
+
+That is exactly the Java-language distinction between `assert` (disabled at runtime unless `-ea` is passed, throws `AssertionError` when it fails) and a checked or unchecked exception (always evaluated, recoverable in principle). The semantic difference is intent: assertions document *invariants the programmer believes the rest of the codebase upholds*, not validation of untrusted input.
+
+I added three such assertions to [GroupAction.groupFigures](jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java):
+
+```java
+public void groupFigures(DrawingView view, CompositeFigure group, Collection<Figure> figures) {
+    assert view != null : "groupFigures requires a non-null view";
+    assert group != null : "groupFigures requires a non-null group";
+    assert figures != null && !figures.isEmpty() : "groupFigures requires at least one figure";
+    ...
+}
+```
+
+and three to `ungroupFigures`, including a *structural* invariant:
+
+```java
+public Collection<Figure> ungroupFigures(DrawingView view, CompositeFigure group) {
+    assert view != null : "ungroupFigures requires a non-null view";
+    assert group != null : "ungroupFigures requires a non-null group";
+    assert view.getDrawing().indexOf(group) >= 0 : "group must already belong to the drawing";
+    ...
+}
+```
+
+These invariants are *already enforced* by `canGroup()` / `canUngroup()` being called immediately before the mutators in `performGroup` / `performUngroup`. The asserts therefore catch the case where some future caller bypasses the guards — exactly the "this should never happen" case the handout asks for. I also wrote a JUnit test that proves the assertion fires:
+
+```java
+@Test(expected = AssertionError.class)
+public void groupFigures_failsAssertion_whenFiguresCollectionIsEmpty() {
+    action.groupFigures(view, mock(CompositeFigure.class),
+            Collections.<Figure>emptyList());
+}
+```
+
+Surefire enables `-ea` by default on the test fork, so this test passes without extra configuration. In production the assertions are silently no-ops unless the JVM is started with `-ea`, which is the correct default.
+
+---
+
+### Step 7 — Run the suite
+
+Final command:
+
+```
+/tmp/maven/bin/mvn test -pl jhotdraw-core --no-transfer-progress
+```
+
+Output (truncated to the relevant lines):
+
+```
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running TestSuite
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.482 s -- in TestSuite
+[INFO] Results:
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+```
+
+The 26 tests are: 2 pre-existing TestNG tests + 16 in `GroupActionTest` + 5 in `UngroupActionTest` + 3 in `GroupFigureTest`. All on every push to GitHub via the existing CI workflow set up in [Lab 3](#lab-3--continuous-integration-and-impact-analysis), so any regression in the Group/Ungroup feature will now break the build instead of being noticed visually.
+
+---
+
+### Test catalogue
+
+For the grader's traceability, here is the complete mapping of test methods to the production methods they exercise:
+
+| Test | Production method | Case category |
+|---|---|---|
+| `canGroup_returnsTrue_whenSelectionHasMoreThanOneFigure` | `GroupAction.canGroup` | best |
+| `canGroup_returnsFalse_whenSelectionHasExactlyOneFigure` | `GroupAction.canGroup` | boundary |
+| `canGroup_returnsFalse_whenSelectionIsEmpty` | `GroupAction.canGroup` | boundary |
+| `canGroup_returnsFalse_whenNoActiveView` | `GroupAction.canGroup` | failure |
+| `canUngroup_returnsTrue_whenSelectionIsSingleMatchingFigure` | `GroupAction.canUngroup` | best |
+| `canUngroup_returnsFalse_whenSelectionIsSingleNonMatchingFigure` | `GroupAction.canUngroup` | failure |
+| `canUngroup_returnsFalse_whenMultipleFiguresSelected` | `GroupAction.canUngroup` | boundary |
+| `canUngroup_returnsFalse_whenSelectionEmpty` | `GroupAction.canUngroup` | boundary |
+| `canUngroup_returnsFalse_whenNoActiveView` | `GroupAction.canUngroup` | failure |
+| `groupFigures_clearsSelection_addsGroupAtFirstFigureIndex_andReselectsTheGroup` | `GroupAction.groupFigures` | best (with ordering) |
+| `ungroupFigures_movesChildrenOutAndRemovesGroup_inOrder` | `GroupAction.ungroupFigures` | best (with ordering) |
+| `ungroupFigures_returnsEmptyCollection_whenGroupHasNoChildren` | `GroupAction.ungroupFigures` | boundary |
+| `actionPerformed_performsGroup_whenIsGroupingActionAndCanGroup` | `GroupAction.actionPerformed` | dispatch, best |
+| `actionPerformed_doesNothing_whenCannotGroup` | `GroupAction.actionPerformed` | dispatch, guard |
+| `actionPerformed_performsUngroup_whenNotGroupingActionAndCanUngroup` | `GroupAction.actionPerformed` | dispatch, best |
+| `groupFigures_failsAssertion_whenFiguresCollectionIsEmpty` | `assert` in `groupFigures` | invariant |
+| `canGroup_returnsFalse_evenWithGroupableSelection` | `UngroupAction` | wiring |
+| `canUngroup_returnsTrue_forSingleGroupFigure` | `UngroupAction.canUngroup` | best |
+| `canUngroup_returnsFalse_forSingleNonGroupFigure` | `UngroupAction.canUngroup` | failure |
+| `actionPerformed_ungroupsRealGroupFigure_andFiresUndoableEdit` | `UngroupAction.actionPerformed` | dispatch, best |
+| `actionPerformed_doesNothing_whenSelectionEmpty` | `UngroupAction.actionPerformed` | dispatch, guard |
+| `isTransformable_returnsTrue_forEmptyGroup` | `GroupFigure.isTransformable` | boundary (vacuous) |
+| `isTransformable_returnsTrue_whenAllChildrenTransformable` | `GroupFigure.isTransformable` | best |
+| `isTransformable_returnsFalse_whenAnyChildNotTransformable` | `GroupFigure.isTransformable` | failure |
+
+24 newly added tests, organised so every column of the matrix from Step 2's "what is worth testing" list is covered by at least one row above.
+
+---
+
+### Reflections
+
+Three things stand out from doing this lab on a real, eight-year-old codebase as opposed to a textbook example.
+
+**(1) The hardest part was the dependency graph, not writing the assertions.** `GroupAction extends AbstractSelectedAction` extends `javax.swing.AbstractAction` and listens to property changes on a `DrawingEditor`. Constructing one in a test requires either a real Swing environment (impossible without a display) or a chain of mocks just to satisfy the constructor. Mockito made this tractable, but I want to record that *had I designed `GroupAction` from scratch* I would have separated the action wiring (Swing concern) from the group/ungroup algorithm (pure domain), so the algorithm could be unit-tested without touching Swing at all. The Lab 4 reflection on *Replace Conditional with Polymorphism* already pointed this way; this lab is independent evidence for the same conclusion. The link is direct: a class with one responsibility is testable in isolation; a class that does action wiring *and* domain logic forces mocks. SRP is, in practice, *a testability principle*.
+
+**(2) The class-identity check in `canUngroup` is a hidden mockability tax.** Half an hour into writing tests I realised that *any* future test that wants to exercise `canUngroup` must use a real concrete figure class because `Object#getClass()` cannot be stubbed. The production code's reliance on `getClass().equals(prototype.getClass())` is an entirely reasonable runtime choice, but it makes the method strictly harder to test. The Clean-Code rule from Lecture 6 (*"prefer polymorphism over type codes"*) would suggest replacing this with a `prototype.matches(figure)` query on the prototype itself — which a mock *could* stub. That is a small but real refactoring opportunity I noticed by virtue of writing the tests.
+
+**(3) Boundary cases I would have missed without writing them down.** *Empty group ungroup* and *no active view* are both states a manual tester would almost never reach. Yet both are reachable via key bindings, scripted actions, or unusual sequences of menu clicks. Pinning them with tests does two things: it documents the contract (the method *will* be called from these states), and it freezes the current behaviour against accidental regression. This is the F.I.R.S.T. *Repeatable* property in action — a property that, until I wrote the tests, only existed by accident.
+
+The hand-out's small print at the bottom asked for "documentation of how I verified my feature." The 24 tests are that documentation: each test name is a sentence describing a fact the code now upholds, and the catalogue table above is the index.

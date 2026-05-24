@@ -153,6 +153,9 @@ public class GroupAction extends AbstractSelectedAction {
     }
 
     public Collection<Figure> ungroupFigures(DrawingView view, CompositeFigure group) {
+        assert view != null : "ungroupFigures requires a non-null view";
+        assert group != null : "ungroupFigures requires a non-null group";
+        assert view.getDrawing().indexOf(group) >= 0 : "group must already belong to the drawing";
         LinkedList<Figure> figures = new LinkedList<>(group.getChildren());
         view.clearSelection();
         group.basicRemoveAllChildren();
@@ -163,6 +166,9 @@ public class GroupAction extends AbstractSelectedAction {
     }
 
     public void groupFigures(DrawingView view, CompositeFigure group, Collection<Figure> figures) {
+        assert view != null : "groupFigures requires a non-null view";
+        assert group != null : "groupFigures requires a non-null group";
+        assert figures != null && !figures.isEmpty() : "groupFigures requires at least one figure";
         Collection<Figure> sorted = view.getDrawing().sort(figures);
         int index = view.getDrawing().indexOf(sorted.iterator().next());
         view.getDrawing().basicRemoveAll(figures);
