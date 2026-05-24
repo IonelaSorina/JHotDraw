@@ -18,6 +18,7 @@
 8. [Lab 4 — Refactoring Lab: Group / Ungroup Prefactoring](#lab-4--refactoring-lab-group--ungroup-prefactoring)
 9. [Lecture 5 — Actualization, OO Principles and Clean Architecture](#lecture-5--actualization-oo-principles-and-clean-architecture)
 10. [Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw](#lab-5--actualization-lab-solid-and-clean-architecture-in-jhotdraw)
+11. [Lecture 6 — Clean Code](#lecture-6--clean-code)
 
 ---
 
@@ -1792,3 +1793,249 @@ Putting Labs 2–5 together, the picture of the Group / Ungroup feature is now c
 - Principle-mapped (Lab 5): SOLID violations catalogued; Clean Architecture mapping documented.
 
 The lab handout's actualization framing is therefore satisfied by *documenting the readiness* rather than by writing new feature code: a hypothetical "add a Cluster command" feature now has a known impact set, a known prefactoring baseline, and a known set of design constraints (SOLID + Clean Architecture) the implementation must respect. That, on a real team, is the artefact a tech lead would gate the next sprint on — which is the spirit of the Actualization phase the lecture defined.
+
+---
+
+## Lecture 6 — Clean Code
+
+The sixth lecture pulls together everything that has come before into one practitioner-level standard: Robert C. Martin's *Clean Code: A Handbook of Agile Software Craftsmanship* (2009). Where Lecture 5 gave architectural and class-level principles (SOLID, GRASP, Clean Architecture), Lecture 6 zooms in to the *line-by-line* level — names, functions, comments, formatting, error handling, tests, and class organisation. There is no accompanying lab; the deliverable is internalisation rather than artefacts. This portfolio section captures the rules and ties them back to the actual refactoring already performed in Lab 4.
+
+---
+
+### 6.1 What Clean Code Is
+
+The lecture's opening is a collage of definitions from practitioners who collectively wrote much of modern software's foundational literature. Each is offered as a different angle on the same idea:
+
+| Author | What clean code is |
+|---|---|
+| **Bjarne Stroustrup** | "I like my code to be elegant and efficient. Clean code does one thing well." |
+| **Grady Booch** | "Clean code is simple and direct. Clean code reads like well-written prose." |
+| **Dave Thomas** | "Clean code can be read. Clean code should be literate." |
+| **Michael Feathers** | "Clean code always looks like it was written by someone who cares." |
+| **Ron Jeffries** | "Reduced duplication, high expressiveness, and early building of simple abstractions." |
+| **Ward Cunningham** | "You know you are working on clean code when each routine you read turns out to be pretty much what you expected." |
+
+Two rules of thumb extract the operational essence:
+
+- **The Boy Scout Rule** (Robert C. Martin himself): *"You should always leave the code cleaner than you found it."* Continuous, small improvements bend the code-decay curve from Lecture 1 downward over time.
+- **WTFs/minute** (Thom Holwerda, popularised by the lecture's cartoon): the only honest metric of code quality. A good code review provokes one "wtf"; a bad one provokes a stream of them. The metric is humorous in form but serious in implication — readability is *measurable* by the affective response of an experienced reader.
+
+---
+
+### 6.2 Meaningful Names
+
+The first chapter of clean code is *naming*, because every identifier the reader encounters is either a guidepost or a stumbling block. The lecture's eleven rules:
+
+| Rule | Bad → Good |
+|---|---|
+| **Intension-revealing names** | `List<int[]> getThem()` → `List<Cell> getFlaggedCells()` |
+| **Avoid disinformation** | `int a = l; if (O == l) a = O1;` — `l` and `1`, `O` and `0` are visually indistinguishable. |
+| **Make meaningful distinctions** | `copyChars(char a1[], char a2[])` → `copyChars(char source[], char destination[])` |
+| **Use pronounceable names** | `class DtaRcrd102 { Date genymdhms; ... }` → `class Customer { Date generationTimestamp; ... }` |
+| **Use searchable names** | `for (j=0; j<34; j++) s += (t[j]*4)/5;` → use named constants like `WORK_DAYS_PER_WEEK`. |
+| **Avoid encodings — no member prefixes** | `m_dsc` → `description`. The `m_` prefix encodes an attribute (membership) that IDE highlighting already makes obvious. |
+| **Avoid encodings — no Hungarian notation** | `PhoneNumber phoneString` — the encoded type lies the moment the actual type changes. Just `PhoneNumber phone`. |
+| **Avoid mental mapping** | `for (a = 0; a < 10; a++)` → `for (i = 0; i < 10; i++)` (i, j, k are conventional loop indices). |
+| **Class names are nouns** | `Manager`, `Processor`, `Data`, `Info` are too generic. `Customer`, `WikiPage`, `Account`, `AddressParser` are concrete nouns. |
+| **Method names are verbs** | `postPayment`, `deletePage`, `save`. Predicates: `isPosted`, `hasName`. Static factory methods: `Complex.fromRealNumber(23.0)` rather than `new Complex(23.0)` when context demands. |
+| **Pick one word per concept; don't pun** | If `fetch`, `retrieve`, and `get` mean the same thing across the codebase, pick one. Conversely, never use the same word for two different things. |
+
+Two more rules round out the chapter:
+
+- **Use solution-domain names** when the reader will be a programmer (`AccountVisitor`, `JobQueue`).
+- **Add meaningful context** (group related names by class or by prefix: `firstName`, `lastName`, `street`, `city` are clearly an address only when wrapped in an `Address` class or prefixed `addrFirstName`, `addrLastName`).
+- **Don't add gratuitous context** — `AccountAddress` is fine for an instance but bad for a class; just call the class `Address`.
+
+---
+
+### 6.3 Functions
+
+If naming is the first chapter, functions are the second — and arguably the heart of the book.
+
+#### Rules of functions
+
+- **Small.** Rule one: functions should be small. Rule two: functions should be *smaller* than that. The lecture's working numbers: <20 lines, <150 characters per line.
+- **Do one thing.** "FUNCTIONS SHOULD DO ONE THING. THEY SHOULD DO IT WELL. THEY SHOULD DO IT ONLY." A function does one thing if every statement is at the same level of abstraction.
+- **One level of abstraction per function.** Mixing high-level intent (`getHtml()`), intermediate operations (`PathParser.render(pagePath)`), and low-level details (`.append("\n")`) in the same function is what makes functions long and unreadable.
+- **The Stepdown Rule (reading code top to bottom).** Each function should be followed by those at the next lower level of abstraction, so the file reads like a narrative top to bottom.
+- **Replace switch on type code with polymorphism.** The lecture's `Employee.payAmount()` `switch (getType())` example is rewritten with an abstract `EmployeeType.payAmount(Employee)` and concrete `Salesman`, `Manager` overrides. This is exactly *Replace Conditional with Polymorphism* from Lecture 4.
+- **Use descriptive names.** `testableHtml` → `includeSetupAndTeardownPages`. Don't be afraid of a long name; it is one-time cost.
+
+#### Function arguments
+
+- **Ideal number: zero.** One is acceptable. Two is harder. Three is to be avoided. Four+ is a sign the function needs a parameter object.
+- **Common monadic forms** — one argument is fine when:
+  - asking a question about it: `boolean fileExists("MyFile")`,
+  - transforming and returning it: `InputStream fileOpen("MyFile")`,
+  - it is an event: `passwordAttemptFailedNtimes(int attempts)`.
+- **Flag arguments are bad.** `render(true)` violates "do one thing" — the function is really doing two things and the caller is choosing which. Split into `renderForSuite()` and `renderForSingleTest()`.
+- **Dyadic and triadic functions.** `writeField(name)` is easier than `writeField(outputStream, name)`. `assertEquals(expected, actual)` is borderline because the argument order has a convention you must memorise.
+- **Argument Objects.** `makeCircle(double x, double y, double radius)` → `makeCircle(Point center, double radius)`. Same data, but the wrapping captures the *that-these-belong-together* relationship.
+- **Verbs and keywords.** `write(name)` is improved by `writeField(name)`; `assertEquals(expected, actual)` by `assertExpectedEqualsActual(expected, actual)` (keyword form encodes argument order in the name).
+
+#### Two cross-cutting rules
+
+- **Command-Query Separation.** A function should *either* do something *or* answer something, never both. `boolean set(String attribute, String value)` is unclear in `if (set("username", "unclebob"))…` — is `set` a verb (the command) or an adjective (the query)? Split into `attributeExists("username")` + `setAttribute("username", "unclebob")`.
+- **DRY (Don't Repeat Yourself).** "Duplication may be the root of all evil in software." Every duplicated chunk is N maintenance burdens where there could be one.
+
+#### Structured programming, modernised
+
+Dijkstra's classical rules are one-entry, one-exit. The lecture's modern stance: when functions are small, occasional multiple `return`, `break`, or `continue` statements are *more* expressive than rigid single-exit. The rule is a guideline, not a law.
+
+---
+
+### 6.4 Comments
+
+The lecture's stance is severe: comments are *failures*. Each comment is a place where the code couldn't speak for itself.
+
+#### The two foundational rules
+
+- **Comments do not make up for bad code.** Don't comment bad code — rewrite it.
+- **Explain yourself in code.** `// Check to see if the employee is eligible for full benefits` followed by a cryptic boolean expression is wrong. Extract the expression into `employee.isEligibleForFullBenefits()` and the comment becomes redundant.
+
+#### Good comments (the small list)
+
+- **Legal comments** — copyright headers, licence preambles, mandated by external requirements.
+- **Informative comments** — when a function name can't fully convey intent (`// format matched kk:mm:ss EEE, MMM dd, yyyy` next to a regex Pattern).
+- **Explanation of intent** — *why* a piece of code looks the way it does (`// This is our best attempt to get a race condition by creating large number of threads.`).
+- **Clarification** — when an opaque API call's return value needs annotation (`assertTrue(a.compareTo(b) == -1); // a < b`).
+- **Amplification** — calling out something subtle that would otherwise be missed (`// the trim is real important. It removes the starting spaces that could cause the item to be recognized as another list.`).
+- **Javadocs in public APIs** — well-described public APIs are uniquely valuable.
+
+#### Bad comments (the long list)
+
+- **Mumbling** — a half-sentence that doesn't actually explain.
+- **Redundant** — `// Utility method that returns when this.closed is true.` next to `public synchronized void waitForClose(...)`. The comment says exactly what the signature already says.
+- **Mandated** — `/** @param title The title of the CD. @param author The author of the CD. ...*/` produced by a "every public method must have Javadoc" rule. Forced doc comments are noise.
+- **Journal comments** — `* 11-Oct-2001 : Re-organised the class and moved it to new package ...`. Version control already records this; the comment rots.
+- **Noise comments** — `/** Default constructor. */` over `protected AnnualDateRule() { }`. The reader can see the constructor.
+- **Scary noise** — `/** The name. */ private String name;`. The Javadoc tag on a self-explanatory field actively wastes screen real-estate.
+- **Don't use a comment when a function or variable will do.** `if (smodule.getDependSubsystems().contains(subSysMod.getSubSystem()))` with a comment → `if (moduleDependees.contains(ourSubSystem))` with named local variables.
+- **Position markers** — `// Actions //////////////////` — flagged as noise.
+- **Closing brace comments** — `} //while`. If the brace needs a label, the function is too long.
+- **Attributions and bylines** — `/* Added by Rick */`. `git blame` knows this.
+- **Commented-out code** — a special evil. Other developers will be afraid to delete it. The version-control system holds the deleted version.
+- **HTML comments**, **non-local information**, **too much information**, **inobvious connection between comment and code**, and **function headers on short functions** all earn dishonourable mentions.
+
+The cumulative message: *the burden of justification for a comment is on the comment, not on its absence.*
+
+---
+
+### 6.5 Formatting
+
+Formatting is communication. Code is read far more often than it is written. The lecture's rules:
+
+- **The newspaper metaphor.** A code file should read like a newspaper — high-level concepts (headline) at the top, supporting details below.
+- **Vertical openness between concepts.** Each blank line is a visual cue that a new and separate concept begins.
+- **Vertical density.** Closely related lines should stay close. Field declarations broken up by their own Javadoc comments lose this cue.
+- **Vertical distance.**
+  - Local variables: declared as close to their usage as possible.
+  - Instance variables: declared at the top of the class.
+  - Dependent functions: if A calls B, A above B, B close to A.
+  - Conceptual affinity: code that does similar things, regardless of direct call relationship, should be grouped.
+- **Horizontal openness and density.** Spaces around operators, no spaces inside parentheses. Group strongly-related tokens densely; separate weakly-related tokens with space.
+- **Horizontal alignment is bad.** Aligning the `=` of a block of declarations creates a visual column that emphasises *type names* over *variable names*. The lecture explicitly advises *against* it.
+- **Don't break indentation.** A long class declared on one line is illegible; let braces and indentation do their job.
+- **Team rules.** "Every programmer has their own favourite formatting rules. But if they work in a team, then the team rules." Consistency beats personal preference.
+
+---
+
+### 6.6 Objects and Data Structures
+
+A subtle but important distinction:
+
+- **Objects** hide their data behind abstractions and expose functions that operate on that data.
+- **Data structures** expose their data and have no meaningful functions.
+
+The two are *anti-symmetric* — code is easy to extend in one direction (adding new types) and hard to extend in the other (adding new operations), and vice versa. Mixing the two produces *hybrid* structures that suffer from both problems: hard to add types *and* hard to add operations.
+
+#### The Law of Demeter
+
+A method `m` of class `C` should only call methods of: itself, its parameters, objects it creates, and its instance fields. **Train wrecks** — chained calls like `ctxt.getOptions().getScratchDir().getAbsolutePath()` — violate this, because the caller now knows the structural shape of three different objects. The remedy is either to break the chain into named locals (preserves Demeter only if each link is a query on a directly-held object) or, more often, to expose a single higher-level method on `ctxt` that returns the absolute path directly.
+
+This is exactly the *Principle of Least Knowledge* from Lecture 5.2 — Clean Code restates it at the line level.
+
+---
+
+### 6.7 Error Handling
+
+- **Prefer exceptions to error codes.** Nested `if (… == E_OK) { if (… == E_OK) { … } }` checks become one `try` block with a single `catch`. The happy path is no longer obscured by error-handling noise.
+- **Extract try/catch blocks.** A function that contains a `try/catch` should be *just* the try/catch — extract the body into a separate function. "Error handling is one thing."
+- **Define the normal flow.** Use a *special case object* rather than a special return value. `try { expenses = expenseReportDAO.getMeals(employee.getID()); m_total += expenses.getTotal(); } catch(MealExpensesNotFound e) { m_total += getMealPerDiem(); }` is improved by making `MealExpenses` return a default instance for the missing case, so the caller becomes the single-line `m_total += expenseReportDAO.getMeals(employee.getID()).getTotal();`.
+- **Don't return null.** A method that returns `null` forces every caller to check. Return `Collections.emptyList()` instead. The caller's `for` loop then works unconditionally.
+- **Don't pass null.** Methods that accept `null` as an argument suffer the same fate. Throw `InvalidArgumentException` at the boundary or document the contract.
+
+---
+
+### 6.8 Unit Tests
+
+- **The Three Laws of TDD.**
+    1. You may not write production code until you have written a failing unit test.
+    2. You may not write more of a unit test than is sufficient to fail — and not compiling is failing.
+    3. You may not write more production code than is sufficient to pass the currently failing test.
+- **Test code is just as important as production code.** It is not a second-class artefact.
+- **What makes a clean test? Readability, readability, readability.** The single most important quality.
+- **One assert per test.** Each test reaches a single conclusion that is quick and easy to understand.
+- **Single concept per test.** Even when multiple asserts are needed, they should all be about one logical concept.
+- **F.I.R.S.T.** A clean test is:
+    - **Fast** — runs quickly so it is run often.
+    - **Independent** — tests do not depend on each other; any order works.
+    - **Repeatable** — works in any environment, deterministically.
+    - **Self-validating** — boolean pass/fail, no manual inspection.
+    - **Timely** — written just before the production code that makes them pass (per the Three Laws above).
+
+---
+
+### 6.9 Classes
+
+#### Class organisation (the standard order)
+
+1. Public static constants.
+2. Private static variables.
+3. Private instance variables.
+4. Public functions.
+5. Private utilities, placed right after the public function that calls them (stepdown rule applied within the class).
+
+#### Two further rules
+
+- **Classes should be small.** First rule: small. Second rule: smaller than that. Where functions are measured in lines, classes are measured in *responsibilities* — and the count should be one.
+- **The Single Responsibility Principle (SRP).** "A class or module should have one, and only one, reason to change." This is the same SRP as Lecture 5.2 — Clean Code restates it as a class-organisation principle.
+- **Cohesion.** Maintaining cohesion results in many small classes. When you find yourself wanting to factor a method out of a class into a helper, that is often a signal a new small class wants to exist.
+
+---
+
+### 6.10 Emergent Design — Kent Beck's Four Rules
+
+The lecture closes with Kent Beck's four rules of simple design, in priority order:
+
+1. **Runs all the tests.** A design that doesn't pass its tests isn't a design.
+2. **No duplication.** Every duplicated chunk is a future maintenance burden.
+3. **Expressive.** Names, structure, and shape communicate intent.
+4. **Minimal classes and methods.** Don't add structure that isn't earned.
+
+The order matters. Tests come first because they verify the design is real. Duplication comes second because it is the cheapest improvement with the highest payoff. Expressiveness comes third because it is harder than removing duplication but compounds over time. Minimisation comes last because the temptation to delete classes prematurely is high — Kent Beck explicitly puts this rule *behind* the others.
+
+---
+
+### Reflection on Lecture 6 — connecting back to the portfolio
+
+This lecture has no associated lab in the course schedule, but the rules are not academic — most of them are exactly what my [Lab 4 refactoring](#lab-4--refactoring-lab-group--ungroup-prefactoring) on `GroupAction` already applied without naming. Re-reading my own work through the Clean Code lens:
+
+| What I did in Lab 4 | Clean Code rule it satisfied |
+|---|---|
+| *Compose Method* — extracted `performGroup` / `performUngroup` from a 67-line `actionPerformed` | Functions should be small; do one thing; one level of abstraction per function. |
+| Extracted `getLabels()` to deduplicate four resource-bundle lookups | DRY ("duplication may be the root of all evil in software"). |
+| Removed the stale `// XXX - This code is redundant with UngroupAction` comment | Comments do not make up for bad code; redundant / journal comments are bad. |
+| Removed the dead `prototype` shadow field in `UngroupAction` | Minimal classes and methods (Beck rule 4); class organisation hygiene. |
+
+Two rules from the Clean Code catalogue point at refactorings I *deferred*:
+
+- *Replace switch on type code with polymorphism* (Section 6.3) is the same move as the deferred *Replace Conditional with Polymorphism* on `GroupAction.isGroupingAction` — Lab 4 noted this would simultaneously fix SRP and OCP, and Section 6.3 confirms it would also satisfy the "do one thing" rule at the function level.
+- *Encapsulate / member prefixes are bad* (Section 6.2) flags a small habit in older JHotDraw code: I noticed `_winterRate`, `_summerRate`, `_isDead`, `_seniority` and similar underscore-prefixed fields in the lecture's own examples (which mirror many places in JHotDraw's older code). Cleaning these is a *Boy Scout Rule* opportunity — small, mechanical, IDE-supported renames I can do whenever I'm in those files for another reason.
+
+The clean-code rules also expose two structural problems in JHotDraw that earlier labs only hinted at:
+
+1. **Test coverage is the rate-limiter for the entire programme.** The Three Laws of TDD assume tests exist before production code; the F.I.R.S.T. principles describe what those tests should look like. JHotDraw has two test files in the whole repository ([Lab 3](#lab-3--continuous-integration-and-impact-analysis) finding). The Clean Code framing makes this finding more severe than it looked in Lab 3 — without tests, *every* future refactoring is operating without the first of Kent Beck's four rules. Lab 4 explicitly cited this as the reason three larger refactorings had to be deferred.
+2. **JHotDraw uses comments to compensate for unrefactored code in multiple places.** I removed one such comment in Lab 4; the codebase contains others (`// XXX`, `// FIXME`, `// TODO` distributed across `jhotdraw-core`). Each is a Section 6.4-level smell — a marker of code that, by the original author's own admission, wasn't finished. The *Comments Do Not Make Up for Bad Code* rule provides explicit licence to delete these and refactor toward the intent the comment was hinting at.
+
+The single most useful idea from Lecture 6, for the rest of this course's work, is the *Boy Scout Rule*. Every other lecture has been about big moves — phases, impact sets, refactoring sessions, architectural mappings. The Boy Scout Rule is the smallest possible move: *leave each file fractionally cleaner than you found it on each visit.* Done consistently, it does the work of formal refactoring sessions in the background. Done inconsistently, it does the equivalent of code decay in slow motion. Internalising this rule is the deliverable Lecture 6 actually asks for — and it sits underneath every later lab in the programme.
