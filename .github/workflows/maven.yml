@@ -17,6 +17,7 @@ on:
 permissions:
   contents: read
   actions: write
+  packages: read
 
 jobs:
   build:
@@ -30,6 +31,9 @@ jobs:
         java-version: '17'
         distribution: 'temurin'
         cache: maven
-    - name: Build with Maven
-      run: mvn -B package --file pom.xml
+    - name: Build and test with Maven
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_ACTOR: ${{ github.actor }}
+      run: mvn -B -s .maven-settings.xml test --file pom.xml
 
