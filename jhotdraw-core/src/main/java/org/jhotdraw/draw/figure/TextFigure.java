@@ -73,7 +73,7 @@ public class TextFigure extends AbstractAttributedDecoratedFigure
             TextLayout layout = getTextLayout();
             Graphics2D g2 = (Graphics2D) g.create();
             try {
-                //Test if world to screen transformation mirrors the text. If so it tries to
+                        //Test if world to screen transformation mirrors the text. If so it tries to
                 //unmirror it.
                 if (g2.getTransform().getScaleY() * g2.getTransform().getScaleX() < 0) {
                     AffineTransform at = new AffineTransform();
@@ -102,10 +102,7 @@ public class TextFigure extends AbstractAttributedDecoratedFigure
 
     @Override
     public boolean figureContains(Point2D.Double p) {
-        if (getBounds().contains(p)) {
-            return true;
-        }
-        return false;
+        return getBounds().contains(p);
     }
 
     protected TextLayout getTextLayout() {
@@ -202,7 +199,6 @@ public class TextFigure extends AbstractAttributedDecoratedFigure
 
     @Override
     public int getTextColumns() {
-        //return (getText() == null) ? 4 : Math.max(getText().length(), 4);
         return 4;
     }
 
@@ -241,7 +237,7 @@ public class TextFigure extends AbstractAttributedDecoratedFigure
 
     @Override
     public void setFontSize(float size) {
-        set(FONT_SIZE, new Double(size));
+        set(FONT_SIZE, Double.valueOf(size));
     }
 
     @Override
@@ -286,8 +282,7 @@ public class TextFigure extends AbstractAttributedDecoratedFigure
     @Override
     public Tool getTool(Point2D.Double p) {
         if (isEditable() && contains(p)) {
-            TextEditingTool t = new TextEditingTool(this);
-            return t;
+            return new TextEditingTool(this);
         }
         return null;
     }
