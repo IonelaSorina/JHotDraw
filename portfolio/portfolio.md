@@ -22,6 +22,7 @@
 12. [Lab 7 — Testing Lab: Unit Tests for Group / Ungroup](#lab-7--testing-lab-unit-tests-for-group--ungroup)
 13. [Lecture 9 — Pragmatic BDD for Java](#lecture-9--pragmatic-bdd-for-java)
 14. [Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup)
+15. [Lecture 10 — Example of Software Change and Conclusion of the Change Process](#lecture-10--example-of-software-change-and-conclusion-of-the-change-process)
 
 ---
 
@@ -2967,3 +2968,269 @@ Total runnable: **30 tests, 0 failures.**
 **(4) The `--add-opens` workaround is a Lecture 1 *conformity* difficulty in microcosm.** Lecture 1 listed *conformity* as one of Brooks's essential difficulties — software must conform to its environment, which keeps moving. JDK 25's strict module boundaries are exactly that moving environment, and JGiven 1.3.1 is exactly the kind of legacy library that must be coaxed into conformity. Documenting the fix in the POM is the responsible move; pretending it isn't there is the start of code decay.
 
 **(5) The same behaviour exists at two layers.** US-1's two layers — the JGiven scenario (runs everywhere) and the AssertJ-Swing scenario (runs on a display) — are not duplication. They are two tests of the *same behaviour* at two *different layers of the testing pyramid*. The JGiven scenario locks in the domain logic; the AssertJ-Swing scenario would lock in the menu wiring, key bindings, and Swing focus state that the JGiven scenario consciously mocks away. Both tests can fail and the failure tells different stories — one says *"the algorithm is broken"*, the other says *"the menu binding is broken"*. The lecture's recommendation to use AssertJ-Swing for Swing applications is therefore correct *in addition to*, not *instead of*, JGiven.
+
+---
+
+## Lecture 10 — Example of Software Change and Conclusion of the Change Process
+
+> Lecture 10 has no associated lab. It is the *capstone* lecture of the course: half of it is a worked example that walks Rajlich's full phased model end-to-end on a real codebase, and the other half closes the model with the *Conclusion* phase that completes every change cycle. Together the two halves are the textbook version of what the last nine labs did on JHotDraw.
+
+The lecture combines two chapters of Václav Rajlich's *Software Engineering: The Current Practice*: **Chapter 17 — Example of software change** (38 slides, a full worked example) and **Chapter 11 — Conclusion of software change** (10 slides, the final phase of the phased model). For the portfolio I treat them as one section because the example deck ends *exactly* where the conclusion deck begins.
+
+---
+
+### Part A — Example of Software Change (Rajlich Chapter 17)
+
+#### 10.A.1 The system under study — Drawlets
+
+The example uses **Drawlets**, a small drawing-framework application chosen specifically because it is in the same family of system as JHotDraw:
+
+| Property | Drawlets (lecture) | JHotDraw (this portfolio) |
+|---|---|---|
+| Domain | Adds a graphical drawing canvas to a host application | Adds a structured 2D graphics editor to a host application |
+| Original authors | Kent Beck, Ward Cunningham (then ported to Java) | Erich Gamma, then Werner Randelshofer (multiple rewrites) |
+| Scale | 100+ classes, 35 interfaces, 40,000 LOC | ~9 modules, ~hundreds of classes, similar order of magnitude |
+| Sample / host app | `SimpleApplet` (browser applet) | `Draw` / `SVG` / `Net` / `Teddy` / `Pert` (Swing main classes) |
+| Drawable figures | lines, free-hand lines, rectangles, rounded rectangles, triangles, pentagons, polygons, ellipses, text, images | rectangle, ellipse, line, text, group, … (same family) |
+| Description | "perfect API" | classic Swing teaching framework |
+
+The deliberate parallel matters: the lecture is implicitly saying *"the example you are about to see is the textbook version of the work you have been doing all semester."* The architecture diagram on slide 5 (the *Top classes* slide) — `SimpleApplet`, `DrawingCanvas`, `Figure`, `AbstractFigure`, `Tool`, `SelectionTool`, `ConstructionTool`, `ShapeTool`, `RectangleTool`, `EllipseTool` — is structurally the same diagram I drew for JHotDraw's Group/Ungroup feature in [Lab 2](#lab-2--change-initiation-and-concept-location).
+
+#### 10.A.2 The change request
+
+> *Implement an owner for each figure. An owner is the user who put the figure onto the canvas, and only the owner should be allowed to modify it. At the beginning of a session, the users input their ID and password and they are the owners of all figures that were created during the session. This change will make SimpleApplet more versatile and useful — support for cooperative work.*
+
+This is **identical in structure** to my Lab 2 / Lab 3 change request on JHotDraw's Group/Ungroup: a single-paragraph functional change that touches a vertical slice across the figure model, the tool model, and the user-input layer.
+
+#### 10.A.3 Concept location — the three-way classification
+
+The lecture extracts the nouns and verbs from the change request and classifies them:
+
+| Concept | Irrelevant | External (input from user / environment) | Significant (must be located in code) |
+|---|:---:|:---:|:---:|
+| implement | ✗ |   |   |
+| owner |   | ✗ |   |
+| **figure** |   |   | ✗ |
+| user | ✗ |   |   |
+| **canvas** |   |   | ✗ |
+| allowed | ✗ |   |   |
+| modify | ✗ |   |   |
+| beginning | ✗ |   |   |
+| session |   |   |   |
+| input | ✗ |   |   |
+| ID |   | ✗ |   |
+| password |   | ✗ |   |
+| created | ✗ |   |   |
+
+The two **significant** concepts are *figure* and *canvas*. Everything else is either irrelevant boilerplate (verbs like *implement*, *modify*, *allowed*) or external input (*owner*, *ID*, *password* — these come in through the UI, not the codebase). The two significant concepts are the search targets for concept location — *exactly* the [SUR3/SUL3 → Step 3 of concept location](#lab-2--change-initiation-and-concept-location) I performed in Lab 2.
+
+#### 10.A.4 Concept location — wrong way, backtrack, right way
+
+The lecture's slides 10–12 walk through the **trial-and-error nature** of concept location. The same diagram is shown three times with different highlights:
+
+- **Slide 10 — Wrong way:** the developer starts at `SimpleApplet`, follows the link to `StylePalette`, `ToolBar`, `ToolPalette` (the UI cluster) and ends up nowhere useful.
+- **Slide 11 — Backtrack:** the developer recognises the dead end and **greys out** the explored-but-irrelevant classes.
+- **Slide 12 — Right way:** the developer restarts from `SimpleApplet` and this time follows the link *down* to `DrawingCanvas` — the green node — which is the actual location of the *canvas* concept.
+
+The lecture is explicit that this is not a failure mode but the *normal* shape of concept location. The same pattern reappears for *figure*: slide 13 shows the wrong path (`DrawingCanvas` → `SimpleDrawingCanvas`), slide 14 backtracks, slide 15 shows the right path — `SimpleDrawingCanvas` → `Figure` interface → `AbstractFigure` (highlighted red as the location of the concept).
+
+I want to record explicitly: **this is the same pattern I lived through in [Lab 2](#lab-2--change-initiation-and-concept-location)**, where my first attempt to locate the Group concept led through `Toolbar` / `Action` infrastructure before I traced it down to `GroupAction` and `GroupFigure`. The backtracking is not a sign that I did concept location *wrong* — it is the form concept location *takes*.
+
+#### 10.A.5 Actualization — adding the new classes
+
+Slide 16 (*Actualization*) introduces two new blue classes:
+
+- **`OwnerIdentity`** — a new data class that owns an ID + password pair.
+- **`SimpleListener`** — a new collaborator that subscribes to figure-modification events and rejects modifications from a non-owner.
+
+The red classes (`AbstractFigure` and `SimpleDrawingCanvas`) are the ones that will be *modified*. The blue ones are *added*. This colour-coding maps onto the same distinction I used in [Lab 3's impact-set table](#lab-3--continuous-integration-and-impact-analysis): *which classes are touched* vs. *which classes are added* — Rajlich's diagram makes the same split visible at the class level.
+
+#### 10.A.6 Change propagation — the actual mechanic of OO change
+
+The most important set of slides in the example deck is the **change propagation walk** (slides 17–24, *Propagation 1* through *Propagation — done*). Each slide shows the developer making one local edit and a *coloured halo* spreading from the edited class to the classes that now also need to be updated because their *contract with the edited class has changed*.
+
+The pattern at each step:
+- **Red** = currently being edited.
+- **Orange** = inconsistent with red (impact, needs propagation).
+- **Green** = already updated and consistent again.
+- **Grey** = explored but not impacted.
+
+The walk:
+
+1. **Propagation 1** — modify `SimpleDrawingCanvas`'s figure-handling methods → orange ripple to `CanvasTool` (callers) and `SimpleApplet` (creator).
+2. **Propagation 2** — update `SimpleApplet` → ripple to `StylePalette`, `ToolBar`, `ToolPalette` (its UI children).
+3. **Propagation 3** — update `SimpleApplet` (still ripple front) → `StylePalette` etc. become grey (explored, no further change).
+4. **Propagation 4** — update `LocatorConnectionHandle`, `StylePalette`, `SelectionTool`, `ConstructionTool`, `LabelTool`.
+5. **Propagation 5** — update `PrototypeConstructionTool`; `ShapeTool` becomes the new orange front.
+6. **Propagation 6** — `RectangleTool`, `EllipseTool`, `RectangularCreationTool`, `PG_RectImageTool` become orange (the four leaf tools).
+7. **Propagation — done** — all of the original red classes plus the four leaf tools have been propagated and are now consistent again.
+
+This is the *mechanic* I had to apply by hand in [Lab 3](#lab-3--continuous-integration-and-impact-analysis) when I computed the impact set for Group/Ungroup. The lecture's visualisation is more honest than the table I produced — the ripple front *moves over time*, and a class can become red, then orange (because something it depends on was just changed), then green. My Lab 3 table had a flat "in impact set / not in impact set" column; the lecture shows that the right model is a *time-ordered wave*.
+
+#### 10.A.7 The testing story — the bridge to Labs 7 and 9
+
+The lecture pivots from concept location and propagation to *testing* (slides 25–29), and this is where it loops back to my Labs 7 and 9 in a way I had not previously seen:
+
+| Slide | Content | Connection to my work |
+|---|---|---|
+| 25 — *Unit Tests* | 385 unit tests, 1369 assertions, 4800 lines of test code | My [Lab 7](#lab-7--testing-lab-unit-tests-for-group--ungroup) added 24 unit tests for one feature. Rajlich's project has 385 because the test discipline started early. |
+| 26 — *Functional tests* | 141 functional test cases (Draw / Select / Move / …) | These are *exactly* the behavioural cases [Lab 9](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup) captured for Group / Ungroup as JGiven scenarios. |
+| 27 — *Creation of Acceptance tests* | *"Tool JGiven and Mockito used to run the functional tests"* | **The lecture explicitly names the two libraries I added to JHotDraw in Labs 7 and 9.** This is the textbook validating the practical lab tool choice. |
+| 28 — *Phase of actualization* | New unit tests for new classes; new functional tests for new functionality; *old tests that were impacted by the change were updated*. | Maps onto what I would have done if Lab 4's *Replace Conditional with Polymorphism* refactor had not been deferred. |
+| 29 — *Test suite maintenance* | Unaffected old tests kept as regression; obsolete tests removed; new-feature tests added | The hygiene rule that keeps test code from rotting — explicit in the lecture, implicit in everything I did from Lab 4 onward. |
+
+Slide 27 is the most striking. The textbook (Rajlich 2012) recommends **JGiven + Mockito** for acceptance testing — the exact pair I added to JHotDraw in Labs 7 and 9 without knowing the lecture would later validate that choice. The course's own materials confirm that the test-tooling decision I made independently is *the same decision the textbook makes for the same problem*.
+
+#### 10.A.8 The numerical result of the example change
+
+Slide 30 (*Results*) gives the hard numbers:
+
+| Metric | Value |
+|---|---|
+| Baseline production code | 17,800 lines |
+| Baseline unit-test code | 4,800 lines |
+| **Test-to-production ratio (baseline)** | **≈ 27%** |
+| Production code modified by this change | 91 lines (0.5% of baseline) |
+| Test code modified by this change | 124 lines (2.5% of test baseline) |
+| **Test lines modified per production line modified** | **≈ 1.4** |
+
+Two readings of this number:
+
+1. **The change touched five times more of the test code (proportionally) than of the production code.** The test code is *thinner* than the production code (~27% of total) but *more sensitive* to change — every production edit ripples into 1.4 lines of test edit. This is the *hidden tax* of having tests at all: they make a change more expensive in the short term and infinitely cheaper in the long term.
+2. **The ratio 1.4 is the realistic target for my own labs.** In Lab 4 the prefactoring touched ~30 production lines and required updating ~0 test lines (because almost no tests existed — Lab 3's CI finding). After Labs 7 and 9, the same prefactoring *would* now ripple into the unit + scenario tests, and 1.4 test lines per production line would be a healthy ratio rather than a sign of over-testing.
+
+#### 10.A.9 The refactoring section — same lesson as Lab 4
+
+Slides 31–37 cover the *refactoring* part of the same change. The lecture demonstrates two refactorings whose *purpose is to shorten the change propagation*:
+
+- **Move function (slide 33–34):** move the duplicated `basicNewFigure(...)` logic into the base class `ConstructionTool` (highlighted yellow on slide 34's diagram). The result: fewer classes touched by the next propagation.
+- **Splitting roles (slides 35–36):** the function `move(...)` in `AbstractFigure` was used for *two* roles — user-driven moves (must check identity) and creation-time moves (no identity check). The lecture splits it into `move(...)` + `secureMove(...)`. Only one of the two needs to change.
+
+Slide 37 — *Numerical data* — quantifies the impact:
+
+| | No refactoring | Move function | Splitting roles |
+|---|:---:|:---:|:---:|
+| Classes added | 2 | 2 | 2 |
+| Interfaces modified | 1 | 1 | 1 |
+| **Classes modified** | **13** | **8** | **5** |
+| LOC modified | 91 | 95 | 87 |
+
+The headline: **classes modified drops from 13 to 5 (–62%) by applying these two refactorings**. The line count barely moves (91 → 87), so the refactoring does not reduce the *amount* of code written — it reduces the *scattering*. This is the operational definition of "refactoring shortens change propagation" the lecture is selling.
+
+Slide 38 — *Conclusions* — adds a candid trade-off: splitting roles creates *new* test methods (the original tests now don't cover both code paths), so test code is duplicated. *"More effort is required to create new tests compared to the effort required to adapt existing tests to their changed implementation."* This is the same trade-off that made me defer *Replace Conditional with Polymorphism* in [Lab 4](#lab-4--refactoring-lab-group--ungroup-prefactoring) — the production-side refactor was small; the test-side cost was large.
+
+---
+
+### Part B — Conclusion of Software Change (Rajlich Chapter 11)
+
+The second half of the lecture closes the phased model. Every change ends in the **Conclusion** phase — the orange box at the bottom of the V-shaped phase diagram (Initiation → Concept Location → Impact Analysis → Prefactoring → Actualization → Postfactoring → Conclusion), with *Verification* spanning the right-hand side of the V.
+
+> *"The last phase of software change. The activities depend on the specific software process."*
+
+The conclusion phase has three sequential steps:
+
+#### 10.B.1 The three steps
+
+```
+   Commit      →      New baseline      →      New release
+```
+
+| Step | What happens |
+|---|---|
+| **Commit** | Programmers return their updated code to the configuration-management repository; merge / resolve conflicts. |
+| **New baseline** | The repository state after a thorough test pass — *the new "known-good"*. |
+| **New release** | A baseline that is exposed to end users. Not every baseline becomes a release; releases are gated by separate business decisions. |
+
+#### 10.B.2 The New Baseline phase
+
+The lecture is sharp about two qualities a new baseline must have:
+
+- **A thorough test pass guarantees the baseline is as bug-free as possible.** This is what the [CI workflow](#lab-3--continuous-integration-and-impact-analysis) I set up in Lab 3 attempts to mechanise — every push runs `mvn test`, and the build refuses any PR whose tests fail.
+- **The new baseline represents a *progress* of the project, not a *regression*.** This is exactly the F.I.R.S.T. *Repeatable* property from Lecture 9 applied to the repository, not just to a single test.
+
+Practical observations the lecture adds:
+- Baseline testing is *long* — often done overnight or over a weekend.
+- A *specialised testing team* often conducts it (not the same engineers who wrote the code).
+
+#### 10.B.3 Baseline frequency — the engineering trade-off
+
+| Frequency | Symptom |
+|---|---|
+| **Too rare** | Large accumulation of bugs by the next baseline → testing becomes a *bisection problem* across many changes. |
+| **Too frequent** | Unnecessary overhead — testing, sign-off, release-notes work for changes that have not yet stabilised. |
+
+The lecture's framing: *"The frequency depends on the size of the program and required quality."* The implicit slider runs from *continuous delivery* (frequent, tiny baselines) on one end to *waterfall* (very rare, very large baselines) on the other. Modern continuous-integration setups try to push this slider as far towards *every commit is a baseline* as the test suite allows. JHotDraw's CI (every PR runs `mvn -B test`) is at the *every change* end.
+
+#### 10.B.4 Baseline as a deadline — the social layer
+
+A baseline is not just a technical state but a **social contract**:
+
+- The baseline date is the **deadline to commit** — the time at which baseline testing starts.
+- A programmer who misses the deadline submits *by the next baseline*. This costs them extra rebase / re-test work, and *"management knows how often a particular programmer missed the deadline"*. Missing it repeatedly may require an explanation.
+
+This is the social half of CI culture that the technical CI workflow alone does not capture. The CI tooling enforces "the build is green" — the human process enforces "the build is green *on time*".
+
+#### 10.B.5 Bugs in the baseline — the two outcomes
+
+The lecture's split:
+
+| Severity | Outcome |
+|---|---|
+| **Minor bugs** | Testing team still certifies the baseline. The bugs go onto the *stack of bug reports* and are fixed in future changes. |
+| **More serious bugs** | The testing team can reject the buggy commits. In severe cases the **entire new-baseline work is rejected** — *no new baseline is created* — and all the in-flight work is invalidated or postponed. The testing team can identify which programmer committed the buggy file; *"reputation of these programmers suffers."* |
+
+This is a sharper statement of the same principle as the *Boy Scout Rule* from Lecture 6 — the consequences for breaking the baseline are not just technical, they are reputational. The technical cost of CI failure is recoverable; the reputational cost of repeatedly breaking the build is not.
+
+#### 10.B.6 The stakeholder's role — acceptance testing
+
+A second, separate testing pass exists *outside* the engineering team:
+
+- **Acceptance testing** is functional testing performed *by the stakeholders* (product owners, customers, domain experts).
+- It thoroughly tests software functionalities from a user perspective.
+- It gives stakeholders information about *project progress*.
+- It is the gate at which **stakeholders approve software for the release**.
+
+This is the same "domain expert reads the test" claim that Lecture 9 made about BDD reports. Acceptance testing is the *manual* form; BDD scenarios with JGiven HTML reports are the *automated* form of the same idea — both produce an artefact a non-developer can sign off on.
+
+#### 10.B.7 The new-release phase
+
+From baseline to release is a *separate* decision:
+
+- *"From time to time, the programmers release the baseline code to the users."* The interval is a *business* decision, not (only) a technical one.
+- Releasing requires *substantial extra work* over and above the baseline — packaging, release notes, signing, distribution channels, documentation updates, version bumps.
+
+The lecture introduces the **"versioned model of software lifespan"** — a release pattern that combines:
+
+- **Less frequent large releases** — major versions (`AwesomeApp 4.2`) downloaded and installed by the user.
+- **More frequent small releases** — patches incorporated into the user's installed program via a *merge* tool.
+
+This is the **trunk + patches** distribution pattern that LTS Linux distros, semantic-versioned libraries, and even Maven artifact repositories use: a minor version pinned in `pom.xml` (`9.1-SNAPSHOT` in JHotDraw's case) plus patch releases that consumers can opt into via a dependency-version bump.
+
+---
+
+### Reflection on Lecture 10 — the course in one slide
+
+This lecture is the **capstone** in two senses:
+
+**(1) It is the diagram of what every lab in this portfolio actually was.** Slide 1 of Part A shows Rajlich's phase diagram with *Conclusion* highlighted at the bottom. If I redraw it with my labs in the boxes, the mapping is one-to-one:
+
+| Rajlich phase | My lab |
+|---|---|
+| Initiation | [Lab 2 — change request "add Group / Ungroup feature"](#lab-2--change-initiation-and-concept-location) |
+| Concept Location | [Lab 2 — locating GroupAction, GroupFigure](#lab-2--change-initiation-and-concept-location) |
+| Impact Analysis | [Lab 3 — CI + impact set tables](#lab-3--continuous-integration-and-impact-analysis) |
+| Prefactoring | [Lab 4 — Compose Method + dead-code removal on GroupAction](#lab-4--refactoring-lab-group--ungroup-prefactoring) |
+| Actualization | [Lab 5 — SOLID / Clean Architecture pass](#lab-5--actualization-lab-solid-and-clean-architecture-in-jhotdraw) |
+| Postfactoring | (would be the *Replace Conditional with Polymorphism* refactor I deferred in Lab 4) |
+| **Verification** | **[Lab 7 — JUnit unit tests](#lab-7--testing-lab-unit-tests-for-group--ungroup) + [Lab 9 — JGiven BDD scenarios](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup)** |
+| Conclusion | (the GitHub commits + green CI builds on `alex` branch — the JHotDraw fork's own baseline mechanism) |
+
+The course is not nine independent labs — it is **one full phased software-change cycle, performed on JHotDraw, with the textbook chapter for each phase becoming the corresponding lab.** This lecture is where the diagram is finally drawn in full.
+
+**(2) The textbook validates two specific tool choices I made earlier.** Slide 27 of Part A states: *"Tool JGiven and Mockito used to run the functional tests."* I added Mockito in Lab 7 and JGiven in Lab 9 — without knowing this slide existed — because they were the natural fits for the problems those labs posed. Finding the textbook recommending the same pair in retrospect is *external validation* of the engineering judgement, not a coincidence. The textbook arrived at the same recommendation because the problem shape is the same: *unit-test a Swing-style figure framework with a domain-language overlay for acceptance.*
+
+**(3) The numerical results in slide 30 give me a quantitative target.** Rajlich's project's test-to-production ratio is ~27%, and changes propagate 1.4 test lines per production line. JHotDraw's ratio before my labs was effectively *zero* (Lab 3 finding: two test files in the entire `jhotdraw-core` module). After Labs 7 and 9 I have ~580 lines of test code added against 6 lines of production-side `assert` statements — locally that's a ratio of ~96:1 *for the changes I made*, which is the **opposite** problem to the textbook's: I am over-testing changes I never made, because the baseline test coverage was insufficient. The realistic target for JHotDraw is therefore not "1.4 lines of new test per line of new production code" but "build the test baseline up to ~27% of production code total, *then* apply the 1.4 ratio to subsequent changes". This is a multi-quarter project, not a single lab — but Lecture 10 makes the target legible for the first time.
+
+**(4) The Conclusion phase is the social one.** The first nine labs were all *technical* — phases, refactorings, tests, CI. The Conclusion phase introduces *reputation*, *deadlines*, *management knows*, *stakeholder approval*. Most of the work of maintaining real software is in this last phase — and most of it is not code. The right lesson for the rest of my career is that becoming *good at the Conclusion phase* (writing clean commit messages, keeping PRs small enough that they pass the baseline cleanly, communicating delays before they become broken-baseline events) compounds in a way that becoming better at any individual technical phase does not.
+
+**(5) Two refactorings I want to remember.** Slide 33's *Move function* and slide 35's *Splitting roles* are two refactoring moves I have not yet applied to JHotDraw. *Splitting roles* is the more interesting one — it is the *exact pattern* that would fix the `GroupAction.canUngroup` mockability tax I documented in [Lab 7's reflection (2)](#lab-7--testing-lab-unit-tests-for-group--ungroup): the single method that does both *"check whether a real figure can be ungrouped"* and *"check whether the prototype class matches"* could be split into a query on the prototype itself, which a mock could stub. The course did not assign this refactor as a lab, but it is now sitting on my own personal backlog as the cleanest improvement to make next on JHotDraw — and it would simultaneously satisfy Clean Code's *prefer polymorphism over type codes* rule and Rajlich's *splitting roles shortens change propagation* result. Three different lectures converge on the same one-line change.
