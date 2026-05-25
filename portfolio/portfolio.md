@@ -23,6 +23,7 @@
 13. [Lecture 9 — Pragmatic BDD for Java](#lecture-9--pragmatic-bdd-for-java)
 14. [Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup)
 15. [Lecture 10 — Example of Software Change and Conclusion of the Change Process](#lecture-10--example-of-software-change-and-conclusion-of-the-change-process)
+16. [Lecture 11 — Beyond Technical Debt: Behavioural Code Analysis with CodeScene](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene)
 
 ---
 
@@ -3234,3 +3235,270 @@ The course is not nine independent labs — it is **one full phased software-cha
 **(4) The Conclusion phase is the social one.** The first nine labs were all *technical* — phases, refactorings, tests, CI. The Conclusion phase introduces *reputation*, *deadlines*, *management knows*, *stakeholder approval*. Most of the work of maintaining real software is in this last phase — and most of it is not code. The right lesson for the rest of my career is that becoming *good at the Conclusion phase* (writing clean commit messages, keeping PRs small enough that they pass the baseline cleanly, communicating delays before they become broken-baseline events) compounds in a way that becoming better at any individual technical phase does not.
 
 **(5) Two refactorings I want to remember.** Slide 33's *Move function* and slide 35's *Splitting roles* are two refactoring moves I have not yet applied to JHotDraw. *Splitting roles* is the more interesting one — it is the *exact pattern* that would fix the `GroupAction.canUngroup` mockability tax I documented in [Lab 7's reflection (2)](#lab-7--testing-lab-unit-tests-for-group--ungroup): the single method that does both *"check whether a real figure can be ungrouped"* and *"check whether the prototype class matches"* could be split into a query on the prototype itself, which a mock could stub. The course did not assign this refactor as a lab, but it is now sitting on my own personal backlog as the cleanest improvement to make next on JHotDraw — and it would simultaneously satisfy Clean Code's *prefer polymorphism over type codes* rule and Rajlich's *splitting roles shortens change propagation* result. Three different lectures converge on the same one-line change.
+
+---
+
+## Lecture 11 — Beyond Technical Debt: Behavioural Code Analysis with CodeScene
+
+> Final lecture of the course, no associated lab. The lecture is delivered against Adam Tornhill's *CodeScene* (a commercial behavioural-code-analysis tool that grew out of his book *Software Design X-Rays*). It closes the course by reframing everything the previous ten lectures discussed — technical debt, complexity, evolution, refactoring, testing, baselines — through the lens of one question: *what is the data source we should use to decide where to invest our maintenance effort?*
+
+---
+
+### 11.1 What is technical debt?
+
+The lecture opens with the cleanest one-sentence definition I have seen in the literature, from *Building Evolutionary Architectures* (Ford, Parsons, Kia, p. 110):
+
+> *"Stuff that isn't supposed to be there **and is in the way** of the stuff that is supposed to be there."*
+
+Two things in this definition matter:
+
+- **Not just "old stuff" or "ugly stuff".** The bold *"and is in the way"* is the operative clause. A regrettable but isolated piece of code that nobody ever touches is *not* technical debt — it is just history. A piece of code becomes debt the moment it *obstructs* present work.
+- **Debt is relational, not absolute.** Whether code is "in the way" depends on what work you are doing *now*. The same legacy module is debt for the team writing a new feature on top of it, and not-debt for the team that ships once a year and never touches it.
+
+This is a refinement of the *Boy Scout Rule* from Lecture 6 — the rule says "leave it cleaner than you found it" but doesn't tell you *which* file to visit. Tornhill's definition does: visit the files that are getting in the way of present work.
+
+---
+
+### 11.2 Lehman's Laws of Software Evolution
+
+The lecture grounds the topic in Manny Lehman's classical laws (1980s), which are the same laws Lecture 1 cited under the *code decay* heading:
+
+| Law | Statement |
+|---|---|
+| **Continuing Change** | *"A system must be continually adapted or it becomes progressively less satisfactory."* |
+| **Increasing Complexity** | *"As a system evolves, its complexity increases unless work is done to maintain or reduce it."* |
+
+The second law is the load-bearing one for this lecture: complexity does not stay flat *for free*. The default trajectory of any working system is **rising complexity**. Holding complexity flat is itself a deliberate engineering activity, and reducing it requires more deliberate activity still. This is the empirical foundation of every refactoring chapter in every software-engineering book — without it, the textbook injunction to "refactor regularly" has no force.
+
+---
+
+### 11.3 Why complexity matters — Hickey's *Simple Made Easy*
+
+The lecture quotes Rich Hickey (creator of Clojure, the 2011 talk *Simple Made Easy*):
+
+> *"If you ignore complexity, you will slow down. You will invariably slow down over the long haul … the complexity will eventually kill you. It will kill you in a way that will make every sprint accomplish less."*
+
+The accompanying graph is the *Easy vs Simple* curve: the **Easy** curve starts high (fast initial velocity) and decays towards zero; the **Simple** curve starts lower (slower initial velocity) but rises asymptotically and stays high. The lesson: choosing the *easy* path repeatedly compounds into a system that is fast to start and slow to evolve. Choosing the *simple* path repeatedly compounds into the opposite — a system that is slower to start but maintains its evolution speed indefinitely.
+
+This is the *quantitative* form of the same trade-off Lecture 4 framed qualitatively when it described *prefactoring* (slow now, faster later) vs *just patch it* (fast now, slower later). Hickey gives the curve; Rajlich's phase model gives the *workflow* that pushes you onto the *Simple* curve.
+
+---
+
+### 11.4 The business and product impact of technical debt
+
+The lecture frames the **two stakeholder views** of accumulated debt:
+
+| Stakeholder | Visible symptom |
+|---|---|
+| **Business / Product roadmap** | *Long lead times, lack of predictability* — Sisyphus pushing the boulder. The promised feature dates slip, again and again, because each feature lands on top of more debt than the last. |
+| **End user / Product** | *Bugs* — the cartoon shows multiple blue beetles. Every fix produces another regression. |
+
+These are not *technical* symptoms — they are *business* symptoms. Engineers seeing roadmap slippage often look for *project-management* causes; Tornhill's claim is that the cause is in the codebase, and the *visible* business symptom is the trailing edge of a *technical* root cause. *Technical debt is a business problem misdiagnosed as a planning problem.*
+
+---
+
+### 11.5 Why conventional static-analysis tools are not enough
+
+Slide 7 (*Actionable?*) shows a generic SonarQube dashboard for Apache Tomcat:
+
+| Metric (SonarQube) | Value |
+|---|---|
+| Lines of code | 162,306 |
+| Classes | 1,447 |
+| Violations | **10,072** (8,794 Major) |
+| Duplications | 7.1% |
+| Comments | 26.6% |
+| Cyclomatic complexity / method | 3.1 |
+| Tags (FIXME/TODO) | 356 |
+| **Technical debt** | **11.0% = $341,563 = 683 man-days** |
+
+Tornhill's critique is sharp: this is **not actionable**. A list of 10,072 violations and a 683-man-day debt estimate tells the team *that* there is a debt problem, but provides no rational starting point for *where* to begin paying it back. The 683 man-days assumes you will systematically fix every flagged item — which is exactly what an engineering team will *never* do, because most of those items don't matter.
+
+The Tower of Babel painting on slide 8 makes the same point pictorially: *thousands of years of technical debt. Where do you start when you want to pay it back?* The question the conventional tool cannot answer.
+
+This is the same critique I raised in [Lecture 6](#lecture-6--clean-code) when I noted that JHotDraw contains many `// XXX`, `// FIXME`, `// TODO` markers that the *Comments Do Not Make Up for Bad Code* rule licenses me to remove — but the rule does not prioritise *which* to remove first. Static analysis says everything; behavioural analysis is supposed to say *what to do next*.
+
+---
+
+### 11.6 CodeScene — the movie, not the snapshot
+
+The lecture's pivot:
+
+> *"Static analysis will never be able to tell you if that excess code complexity actually matters — just because a piece of code is complex doesn't mean it's a problem. CodeScene identifies and prioritizes technical debt **based on how the organization works with the code**."*
+
+The reframing in two phrases:
+
+- **+ Time aspect** — what the code looked like a year ago, what it looks like today, the *trajectory* in between.
+- **+ Organization & people** — who touches each file, how often, in what combination with which other files.
+
+The data source is *git*. The architecture diagram on slide 11:
+
+```
+Source Code   +   Version-Control Data   +   Project-Management Tools (e.g. JIRA)
+                                ↓
+            Code, Process, and Evolutionary Metrics
+                                ↓
+       Pattern Detectors, Machine Learning and Intelligence
+                                ↓
+       Visualizations, priorities, predictive analytics
+```
+
+The unconventional input is the **middle** lane — *Version-Control Data*. Conventional analysis ignores git entirely; behavioural analysis treats git as the primary signal and the source code itself as secondary context.
+
+---
+
+### 11.7 Hotspots — Principal × Interest = Hotspot
+
+The lecture's central operational concept is the **hotspot**:
+
+> *"A hotspot is a complicated code that you have to work with often."*
+
+Two factors multiplied together:
+
+| Factor | Source | Analogue (financial debt) |
+|---|---|---|
+| **Code complexity** (cyclomatic, lines, etc.) | Source code | **Principal** — how much you owe |
+| **Code change frequency** | git log | **Interest rate** — how often you pay for owing |
+
+The product of the two is the **hotspot**. A complex file that never changes is *principal-only* debt — you owe a lot but you never pay interest, so it is not urgent. A simple file that changes constantly is *interest-only* — you pay often, but the per-touch cost is low. A **complex file that changes constantly** is paying high interest on high principal — *that* is where the team's effort is silently being eaten.
+
+The ReactJS visualisation on slide 13 is the operational form: each circle is a file, area is complexity, redness is change frequency. The red circles cluster in `react-reconciler`, `react-devtools-shared`, and `react-interactions` — exactly where a React engineer would intuitively *expect* the maintenance pain to live, but now quantified.
+
+---
+
+### 11.8 Hotspots are also where the bugs live
+
+Slide 14 cites Graves, Karr, Marron and Siy's 2000 IEEE TSE paper *Predicting Fault Incidence Using Software Change History*. Two empirical findings:
+
+- *"Process measures based on the change history are more useful in predicting fault rates than product metrics of the code. **The number of times code has been changed is a better indication of how many faults it will contain than is its length.**"*
+- *"If a module is, on the average, a year older than an otherwise similar module, **the older module will have roughly a third fewer faults**."*
+
+The two findings together produce the operational rule: **bugs cluster where change clusters**. The hotspot map is therefore *also* a fault-prediction map. This is the empirical claim that justifies the entire CodeScene paradigm.
+
+Connecting to the labs: my [Lab 3 impact-analysis](#lab-3--continuous-integration-and-impact-analysis) computed an *impact set* — the classes that would be touched by the Group/Ungroup change. CodeScene's *change coupling* (slide 19) is the same idea computed *historically* from git instead of *statically* from the call graph. Both produce a graph of "what tends to change together"; the lab computed it forward (predict the next change), CodeScene computes it backward (look at the history). Both views matter — the static view is the *possible* impact set, the historical view is the *observed* impact set.
+
+---
+
+### 11.9 X-Ray — drilling into a hotspot
+
+Once a hotspot is identified at the *file* level (slide 17 — `renderer.js` in react-devtools-shared, 2,444 LOC, 167 commits, Code Health 5/10, 34 defects = 20% bug fixes), CodeScene's *X-Ray* feature drills into the **functions inside** the file:
+
+| Function | Change Frequency | LOC | Cyclomatic Complexity | Overloaded? |
+|---|---:|---:|---:|---:|
+| attach (top-level context) | 103 | 109 | 9 | 1 |
+| attach.recordMount | 37 | 48 | 8 | 1 |
+| attach.handleCommitFiberRoot | 32 | 89 | **19** | 1 |
+| attach.flushPendingEvents | 30 | 105 | 15 | 1 |
+| attach.inspectElement | 30 | 93 | 12 | 1 |
+| attach.flushInitialOperations | 29 | 51 | 6 | 1 |
+| **attach.updateFiberRecursively** | **24** | **220** | **48** | 1 |
+| **attach.inspectElementRaw** | **24** | **180** | **45** | 1 |
+| attach.recordUnmount | 18 | 50 | 9 | 1 |
+
+This is the *concrete* output the team can act on. `updateFiberRecursively` (220 LOC, cyclomatic complexity 48, changed 24 times) is the single function that, if refactored, would yield the biggest reduction in expected future bug-fix work. The list is at most a dozen lines — actionable in a way that "10,072 violations" never is.
+
+---
+
+### 11.10 Change coupling — what changes together
+
+Slide 19's chord diagram shows **change coupling**: pairs of functions that commit together in the git history. The chord between `renderer.js::attach (top-level context)` and `CommitTreeBuilder.js::updateTree.switch` is the visualisation of a *hidden dependency* — these two functions live in different files, the static analyser cannot see the relationship, but the git history shows that engineers always edit them together.
+
+This is the same coupling Lecture 3 introduced statically as the *change-impact graph*; CodeScene re-derives it from *history* rather than *call graphs*. The two views can disagree, and **the disagreement is informative**:
+
+- If two files change together but the call graph says they shouldn't: hidden coupling (a *shotgun-surgery* smell — slide 24 lists this explicitly).
+- If two files don't change together but the call graph says they should: dead path (the static dependency is there but the code is no longer exercised).
+
+---
+
+### 11.11 Legacy code — *the technical debt that wasn't*
+
+Slide 21 redefines *legacy code* in two parts:
+
+- *"Code that lacks in quality (relative perspective)."*
+- *"Code that **we didn't write ourselves**."*
+
+The second clause is the surprising one. A team can call code "legacy" because it is *unfamiliar*, not because it is *bad*. The pictorial joke on the slide — Products #1 and #2 get a thumbs up, Product #3 gets a question mark — is the team encountering Product #3 for the first time. *"The Technical Debt That Wasn't"*: code that looks like debt because nobody on the team knows it, but is actually fine and just needs onboarding.
+
+This is the most relevant slide for *my* portfolio. **JHotDraw is legacy code by both definitions in my case:**
+
+- *Lacks quality*: parts of it (the comments compensating for bad code, the dead prototype field in `UngroupAction`, the `getClass()`-based class-identity check) genuinely have quality issues, as Labs 4 and 7 documented.
+- *I didn't write it*: the entire codebase is Werner Randelshofer's, with Erich Gamma roots going back further. *Every single line is foreign to me.*
+
+The implication: the *first* tool I should use on JHotDraw is not a refactoring tool, it is a tool that tells me *which parts are dangerous to touch* — which is exactly the question CodeScene was built to answer.
+
+---
+
+### 11.12 Knowledge loss — what happens when authors leave
+
+Slides 22–23 (*How quickly can you turn your codebase into legacy code?* / *After they leave...*) introduce CodeScene's *off-boarding simulation*. Each developer is associated with the files they have authored (according to git blame). Toggling a developer off simulates their departure — the files where they were the *primary* author flip from blue (*Knowledge*) to red (*Simulated Loss*) and dark red (*Off-Boarding Risk*).
+
+The exercise on the slide shows simulating Brian Vaughn leaving React. After the toggle, a huge cluster of red dots appears in `react-devtools-shared` and `react-reconciler` — the exact directories the earlier hotspot map highlighted. **The knowledge concentration map and the hotspot map overlap.** Where bugs cluster, knowledge also clusters in one person — and if that person leaves, the hotspot becomes orphaned legacy code.
+
+JHotDraw is the *extreme* version of this. Werner Randelshofer left active maintenance years ago; the fork I am working on has *no* primary author on most files. Every file is a CodeScene "off-boarded" file in red — the entire repository is knowledge-loss territory by default. The Group/Ungroup feature I worked on is no exception. The mitigation, from the lecture's recommendations:
+
+- Document hotspots before touching them. *(My Lab 2 concept-location notes.)*
+- Add tests around hotspots before refactoring. *(My Labs 7 and 9 unit and BDD tests.)*
+- Apply the *Boy Scout Rule* — leave files cleaner on each visit. *(My Lab 4 dead-code removal.)*
+
+The lecture validates each lab's deliverable as a knowledge-recovery action, not just a technical-cleanup action.
+
+---
+
+### 11.13 The rest of the CodeScene toolbox
+
+Slide 24 lists features I have not used but want to record:
+
+- **Change coupling** — covered in 11.10.
+- **Microservices analyses** — *shotgun surgery* (one change touches many services), *team conflicts* (two teams write the same file), *technical sprawl* (services drifting in shared structure).
+- **Proactive warnings** — alerts in the PR review stage when a touch is going into a known hotspot.
+- **Retrospectives** — post-mortem reports correlating delivery slippage with hotspot regressions.
+- **Delivery Performance** — DORA-style lead-time / change-failure metrics.
+- **Branch Analyses** — long-lived branches as a structural smell.
+
+None of these are unique innovations — they are the same DORA / agile-metric repertoire — but they are all powered by the *same git data*. The integration is the value.
+
+---
+
+### 11.14 The four-line conclusion
+
+The lecture's closing slide:
+
+> - *Technical debt is a real problem regardless of programming language.*
+> - *There's a huge amount of useful information stored in your version control system.*
+> - *Ultimately, you need to rely on human expertise.*
+> - *Support your developer's judgment and experience with data to get the highest ROI.*
+
+The third point is striking after a 26-slide deck about a heavily quantitative tool: *the tool does not replace human judgement; it informs it.* This is the same humility from the SonarQube critique on slide 7 — *more data does not equal more action.* Data that an experienced developer cannot interpret is not an asset.
+
+---
+
+### Reflection on Lecture 11 — closing the course
+
+Three syntheses I want to record as the final lecture-level reflection of the course.
+
+**(1) The course recapitulated, with hindsight.** Lecture 11 is the final piece of the same argument that started in Lecture 1's *code decay* and ran through every lab:
+
+| Lecture | Phrase from the lecture | The same idea in CodeScene's vocabulary |
+|---|---|---|
+| 1 — Essential difficulties | Complexity, Conformity, Discontinuity | Hotspot, Change Coupling, Off-Boarding Risk |
+| 2 — Change request | "Where does the concept live?" | Hotspot drill-down |
+| 3 — Impact analysis | Static call-graph impact set | Historical change-coupling graph |
+| 4 — Prefactoring | "Refactor before the change" | "Pay down the hotspot principal before the next sprint touches it" |
+| 5 — SOLID + Clean Architecture | SRP keeps classes from sprawling | Low change coupling between files |
+| 6 — Clean Code | The Boy Scout Rule | Fix hotspots when you visit them, not in a separate refactoring quarter |
+| 7-implied / Lab 7 — Unit tests | F.I.R.S.T. unit tests | The test floor that makes Lab 4-style refactorings *safe*, which makes the Boy Scout Rule *feasible* |
+| 9 — BDD | Living documentation | The artefact a new contributor reads to **recover** the lost knowledge of an off-boarded author |
+| 10 — Phased model + Conclusion | Initiation → … → Conclusion, with baseline / release | The repository as the long-running artefact that *accumulates* all of the above |
+| **11 — CodeScene** | **"It's a movie rather than a snapshot."** | **The framing that makes all of the above measurable.** |
+
+The course is therefore not a sequence of independent topics but **one argument repeated at increasing resolution**, with each lecture supplying a different vocabulary for the same idea. Lecture 11 supplies the *measurement* vocabulary — and is the right place for the course to end, because once you can measure a problem, the next step is in your hands rather than the textbook's.
+
+**(2) The practical thing I would do next on JHotDraw.** If I had CodeScene access, the very first command I would run is a `git log` analysis against `jhotdraw-core/src/main/java`. My empirical prediction (based on the *Boy Scout Rule* opportunities I noticed across the labs) is that the hotspots would include:
+
+- `org.jhotdraw.draw.figure.AbstractCompositeFigure` — the base class everything in the Group/Ungroup feature inherits from.
+- `org.jhotdraw.draw.DefaultDrawingView` — the Swing-event-heavy view class that mediates between actions and the drawing.
+- `org.jhotdraw.draw.action.AbstractSelectedAction` — the action superclass with the Lab 7 mockability tax.
+
+The order in that list is my guess at the **principal × interest** ranking — `AbstractCompositeFigure` has the most static complexity but probably changes rarely; `DefaultDrawingView` is huge *and* gets touched a lot; `AbstractSelectedAction` is small but touched on every action change. Without the tool I cannot verify; with the tool I would know in five minutes which to refactor first.
+
+**(3) The course as a whole, said in one sentence.** Software maintenance is the activity of **making safe, small, frequent changes to a moving system whose codebase outlives every individual who has worked on it.** Every lecture and every lab in this portfolio is a different angle on that one sentence. Lecture 1 named the difficulties; the middle lectures gave the workflow; Lecture 11 gives the instrument panel that tells you, on any given Monday morning, *where in the codebase to apply the workflow today*. The course has, in retrospect, taught me both the *what to do* and the *where to do it next* — and these are the two questions a working software maintainer answers every week of their career.
