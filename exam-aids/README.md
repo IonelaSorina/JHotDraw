@@ -19,6 +19,7 @@ Lectures, labs, and the portfolio distilled into a searchable reference library.
 | 06 | [Numbers and frameworks](06-numbers-and-frameworks.md) | Lientz-Swanson percentages, CHAOS report, assertion-density data, refactoring impact tables. Specific numbers = credible essay. |
 | 07 | [Glossary](07-glossary.md) | When you forget what a term means or want a one-line definition to paste. |
 | 08 | [Concept map](08-concept-map.md) | How concepts connect across lectures. Use this to weave a coherent argument across the whole essay. |
+| 09 | [Chapter Q&A](09-chapter-qa.md) | 300 exam-style Q&A — 30 per lecture chapter. Recall-layer flashcards. Use Ctrl-F to find a topic; revise top-to-bottom across 3-4 sessions before the exam. |
 
 ---
 
@@ -42,6 +43,7 @@ Lectures, labs, and the portfolio distilled into a searchable reference library.
 - Use file 01's transition phrases as connective tissue.
 - Use file 07 if you blank on a term.
 - Use file 08 to confirm that the section transitions are *load-bearing* (each section should follow from the previous, not just sit next to it).
+- Use file 09 if you need a one-paragraph factual recall on a specific concept (e.g., "state Lehman's 2nd law").
 
 ---
 
