@@ -20,10 +20,13 @@
 10. [Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw](#lab-5--actualization-lab-solid-and-clean-architecture-in-jhotdraw)
 11. [Lecture 6 — Clean Code](#lecture-6--clean-code)
 12. [Lab 7 — Testing Lab: Unit Tests for Group / Ungroup](#lab-7--testing-lab-unit-tests-for-group--ungroup)
-13. [Lecture 9 — Pragmatic BDD for Java](#lecture-9--pragmatic-bdd-for-java)
-14. [Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup)
-15. [Lecture 10 — Example of Software Change and Conclusion of the Change Process](#lecture-10--example-of-software-change-and-conclusion-of-the-change-process)
-16. [Lecture 11 — Beyond Technical Debt: Behavioural Code Analysis with CodeScene](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene)
+13. [Lecture 7 — Software Testing: How to Make Software Fail](#lecture-7--software-testing-how-to-make-software-fail)
+14. [Lecture 9 — Pragmatic BDD for Java](#lecture-9--pragmatic-bdd-for-java)
+15. [Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup)
+16. [Lecture 10 — Example of Software Change and Conclusion of the Change Process](#lecture-10--example-of-software-change-and-conclusion-of-the-change-process)
+17. [Lecture 11 — Beyond Technical Debt: Behavioural Code Analysis with CodeScene](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene)
+18. [Capstone Reflection — The Course as One Argument](#capstone-reflection--the-course-as-one-argument)
+19. [Bibliography](#bibliography)
 
 ---
 
@@ -2352,7 +2355,247 @@ The hand-out's small print at the bottom asked for "documentation of how I verif
 
 ---
 
-## Lecture 9 — Pragmatic BDD for Java
+## Lecture 7 — Software Testing: How to Make Software Fail
+
+> The Lecture 7 deck arrived *after* I had already completed [Lab 7](#lab-7--testing-lab-unit-tests-for-group--ungroup). I am documenting it retroactively, which gives the section an unusual property: every rule the lecture states can be cross-checked against what I actually did in the lab. Where I followed the rule, the deck is validation; where I didn't, it is a gap to record.
+
+The lecture is the theoretical / conceptual backbone of Lab 7 and Lab 9. It does not introduce new code; it introduces the *framing* against which both labs make sense — the impossibility result that bounds what testing can prove, the taxonomy of test kinds, the rules for writing code that *can be tested*, and the disciplines (assertions, TDD, mocks) that make those rules operational.
+
+---
+
+### 7.1 The theoretical reason testing is incomplete
+
+The lecture opens with **Turing's halting problem** as the formal foundation. Given a coded description of a Turing machine and an input for it, no general program can decide *will it halt or loop forever?* By Rice's theorem, the same impossibility extends to almost every non-trivial property of program behaviour, including *"is this code free of bugs?"*. This is not a tooling limitation — it is a **theorem**.
+
+The operational consequence is the famous **Dijkstra dictum**:
+
+> *"Testing can demonstrate the presence of bugs, but not their absence."*
+
+The lecture's gloss: *residual bugs can still hide in the code, undetected by tests, as no test suite guarantees an error-free program.* This single sentence reframes everything Lab 7 did. Each of the 24 tests I added is a *demonstration that one bug is not present right now*; the suite as a whole is **not** a proof that the Group/Ungroup feature is correct. The portfolio section for Lab 7 already implicitly accepted this — "well designed tests come close to be adequate" is the most the theorem allows.
+
+---
+
+### 7.2 The "what is going on?" decision tree
+
+When `test output OK?` returns *no*, the lecture asks the diagnostic question in five steps, each of which can independently be the source of the failure:
+
+```
+test output -> OK ? --no--> Bug in SUT ? --no--> Bug in acceptability test ?
+                                                          |
+                                                         no
+                                                          v
+                                                Bug in specification?
+                                                          |
+                                                         no
+                                                          v
+                                            Bug in OS, compilers, libs, hardware?
+```
+
+Each box can answer *yes*, which terminates the search. The example for *"bug in specification"* is the **Mars Climate Orbiter** (1999): one team specified force in pounds-force-seconds (Imperial), another in newton-seconds (Metric). Both teams wrote correct code against their own specification. The spec itself disagreed with itself. The orbiter burned up in the Martian atmosphere.
+
+This tree is the most useful single diagram I learned from the entire course. *Test failure ≠ bug in code.* If the unit test claims `2 + 2 == 5`, the test is wrong. If the spec says `sqrt(-1) = error` and the code returns `i`, the spec is wrong. The diagnostic discipline of asking each question in order is what separates a working test culture from cargo-cult red-green.
+
+---
+
+### 7.3 The taxonomy of test kinds
+
+The lecture's six-way diagram:
+
+| Test kind | What it tests | Example from my labs |
+|---|---|---|
+| **Unit testing** | One module, all dependencies mocked | [GroupActionTest](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/GroupActionTest.java) (Lab 7) |
+| **Integration testing** | Two or more modules wired together | [GroupUngroupScenarioTest](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/bdd/GroupUngroupScenarioTest.java) — uses real `DefaultDrawing` with mocked view (Lab 9) |
+| **System testing** | The whole assembled system | (would be `DrawAppSwingScenarioTest` if runnable) |
+| **Differential testing** | Two implementations compared for equality | (not in my labs — would compare old GroupAction vs refactored GroupAction) |
+| **Stress testing** | Push the SUT to limits | (not in my labs) |
+| **Random testing** | Feed unconstrained inputs | (not in my labs — property-based testing with jqwik would be the JVM tool) |
+
+The lecture also distinguishes orthogonally between **white-box** (test has access to internals — what my JUnit tests are) and **black-box** (test only sees the API — what my JGiven scenarios are). This is a useful re-reading of what I built: Labs 7 and 9 are *the same feature tested through two complementary boxes*.
+
+---
+
+### 7.4 Creating testable software — the eight rules
+
+The lecture's slide on *Creating Testable Software* lists eight rules. I score Lab 7 against each:
+
+| Rule | My Lab 7 application |
+|---|---|
+| **Clean Code** | Lab 4 prefactoring removed the dead `prototype` field and the cryptic `XXX` comment ✓ |
+| **Refactor** | Lab 4 *Compose Method* extracted `performGroup` / `performUngroup` ✓ |
+| **Describe what it does and how it interacts** | Lab 9 BDD scenarios *are* this description ✓ |
+| **No extra Threads** | Avoided by mocking the Swing event dispatch ✓ |
+| **No swap of global variables** | JHotDraw doesn't have global state in this feature ✓ |
+| **No pointer soup** | N/A in Java |
+| **Module unit tests** | Lab 7 added 24 ✓ |
+| **Support fault injection** | Not yet attempted (covered in 7.9) ✗ |
+| **Assertions, Assertions, Assertions !!!** | Added 6 production `assert` statements in `groupFigures` / `ungroupFigures` ✓ (sparse vs the lecture's recommended density — see 7.6) |
+
+Score: 8/9 fully and 1/9 partially. The biggest gap is **fault injection**, which I have not yet practised.
+
+---
+
+### 7.5 The three rules for assertions
+
+The lecture's three rules:
+
+| Rule | Meaning | Did Lab 7 follow it? |
+|---|---|---|
+| **R1: Assertions are not for error handling** | Use exceptions for *expected* failure modes, assertions for *impossible* states. | ✓ My assertions check invariants that production code already upholds — they catch *future* callers that bypass `canGroup()` / `canUngroup()`. |
+| **R2: NO SIDE EFFECTS** | An assertion that mutates a field is silently disabled in production. | ✓ My assertions are pure boolean expressions. |
+| **R3: No silly assertions** | `assert 1+1==2;` adds nothing. | ✓ Each of my assertions encodes a real invariant. |
+
+A subtler point the lecture raises in *Disable Assertions?* — code can come to *rely* on a side-effect assertion that vanishes in production. This is the worst-case failure mode for R2. My assertions in `GroupAction.groupFigures` would survive being disabled, because the production code has its own `canGroup()` guard upstream.
+
+---
+
+### 7.6 Production assertion density
+
+The lecture's data point on real-world systems:
+
+| Project | Assertions | Lines of code | Density |
+|---|---:|---:|---:|
+| **GCC** | ~9,000 | ~7M LOC | ~1 per 800 |
+| **LLVM** | ~13,000 | ~1.4M LOC | ~1 per 110 LOC |
+| **My Lab 7 change** | 6 | ~180 LOC in `GroupAction` | ~1 per 30 LOC |
+
+LLVM's 1-per-110 ratio is the working target. My 1-per-30 is *too dense* for the size of the feature, but the more honest framing is: I added six assertions to one method out of a 9-module project that has *zero* assertions elsewhere. The right way to read this is not "Lab 7 was over-asserted" but "JHotDraw as a whole is starved of assertions, and I have started filling that gap in one feature." A Boy-Scout-Rule-style policy of adding an assertion per visit would bring the project to LLVM density over hundreds of commits.
+
+The lecture is also explicit about **when to use assertions**: enable them in *running software that can be recovered by failing early* (web servers, IDEs, build tools), and disable them in *mission-critical* code that must continue rather than recover (avionics, the Mars-landing-stage of a Rosetta-style probe). Surefire runs tests with `-ea` by default; the question of whether to ship JHotDraw with `-ea` on or off would be a deployment decision, not a coding one.
+
+---
+
+### 7.7 The Fragile Test Problem — four sensitivities
+
+This is the lecture's most operationally useful section. *In Agile, these are all changing all the time*, so a fragile test is a test that breaks for the wrong reason:
+
+| Sensitivity | Trigger | Lab 7 evidence |
+|---|---|---|
+| **Behaviour sensitivity** | Business-logic change | A `canGroup` rule change (e.g. allow 1-figure groups) would break ~6 of my tests. *Expected* fragility. |
+| **Interface sensitivity** | Rename / delete a method or window | Renaming `groupFigures` would break my tests at compile time. *Expected*. |
+| **Data sensitivity** | Database / fixture changes | Not applicable — my tests build fixtures inline. |
+| **Context sensitivity** | OS / time-zone / locale changes | The `ResourceBundleUtil.getBundle("...Labels")` call hits the JVM default locale. A locale switch could fail label-related assertions. *Latent fragility I had not noticed.* |
+
+The third row is the surprise. The `Labels.properties` resource bundle is loaded with the JVM default locale — `Labels_de.properties` exists in JHotDraw too. If a tester ran my Lab 7 suite under `-Duser.language=de`, some of the label-related setup might pick the German strings. *None of my tests assert on label content*, so this is dormant, but it is an example of context sensitivity I would not have spotted without the lecture's framing.
+
+---
+
+### 7.8 Testing under the UI
+
+The lecture's principle: **automate tests at the application layer, not the UI layer**.
+
+```
+   Manual Test ────┐
+   Automatic Test ─┴──> [Application Layer]
+                                │
+                                v
+                        [Domain Layer]
+                                │
+                                v
+                        [Persistence Layer]
+```
+
+The recommendation: route automated tests *below* the Thin Presentation Layer. This is exactly what Lab 9 did — the JGiven scenarios go straight to `GroupAction.actionPerformed` and bypass the menu/key-binding layer entirely. AssertJ-Swing would be the *exception* — the GUI tests have to enter through the presentation layer because that's the layer being tested.
+
+So I now have a name for the architectural decision Lab 9 made: *automate under the UI by default; reach into the UI only for the cases where the UI itself is the SUT.*
+
+---
+
+### 7.9 Fault injection
+
+The lecture's pattern: replace a low-level API call with a wrapper that *can fail on demand*.
+
+```
+file = open("/tmp/foo", 'w')
+        ↓
+file = my-open("/tmp/foo", 'w')
+                                 // my-open succeeds 100 times, then fails 1% of calls
+```
+
+This tests the *recovery paths* — the `try/catch` blocks, the retry logic, the graceful-degradation code that production almost never exercises in a happy-path test suite. JHotDraw has very few I/O failure paths in the Group/Ungroup feature (no database, no network), so fault injection has lower ROI here than it would in a service-oriented codebase. But the technique generalises: a mocked `Drawing` that returns `null` from `sort()` once every 100 calls would test what happens if Drawing's sort is somehow broken — and my current test suite would not catch that.
+
+---
+
+### 7.10 TDD — the cycle and the "real" version
+
+The TDD cycle:
+
+```
+       ┌─→ Red: write a failing test
+       │   ↓
+       │   Green: make it pass with the minimum code
+       │   ↓
+       └── Refactor: clean up, with the test as a safety net
+       
+       Until: no more ideas for tests
+```
+
+Two important constraints the lecture flags:
+- **One test at a time.**
+- **Implement only as much code so that the test does not fail.** If the implementation feels incomplete, add a *new failing test* that forces more code. Don't speculatively over-implement.
+
+The lecture distinguishes **Moving to TDD** (write tests before code, but still hand off to QA at the end) from **Real TDD** (write test, implement, refactor, the developer's own QA loop — defects discovered later become new failing tests, not bugs handed back over a fence). The diagrams make it visual: in "Real TDD" the QA column disappears as an organisational silo and reappears as a *step the developer performs themselves*.
+
+Neither Lab 7 nor Lab 9 was TDD in this strict sense — I wrote tests for an existing 8-year-old codebase, not for code I was about to write. But the *one-test-at-a-time* discipline matched my approach: each of the 24 unit tests was added one at a time, each named after the property it pinned, each verified in isolation before the next.
+
+---
+
+### 7.11 Mock vs Stub vs Spy — the test-doubles taxonomy
+
+The lecture distinguishes three kinds of test doubles, which Lab 7 used somewhat loosely:
+
+| Double | What it is | When to use |
+|---|---|---|
+| **Stub** | Holds *predefined data*; minimal methods; static. | When the SUT just needs a constant answer from a dependency. |
+| **Mock** | Stores method calls; *records and verifies* interactions. The most powerful and flexible. | When the SUT's correctness is in *which methods it called*, not just what it returned. |
+| **Spy** | A *partial* mock — wraps a real object and replaces specific methods. | When most of the real behaviour is fine but one method needs to be controlled. |
+
+In Lab 7 I used Mockito's `mock()` exclusively. I never reached for a stub (the simpler option) or a spy (the half-real option). Re-reading [GroupActionTest.setUp](jhotdraw-core/src/test/java/org/jhotdraw/draw/action/GroupActionTest.java#L62-L74) through this taxonomy:
+
+- `editor`, `view`, `drawing` are **mocks** — I verify call sequences with `InOrder`.
+- A *stub* would have been sufficient for the `editor` and `view` in the `canGroup` tests (no `verify` is ever called on them in those tests).
+- A *spy* on a real `GroupFigure` would have let me keep its `getClass()` behaviour and override only `clone()` — solving the *mockability tax* problem I flagged in Lab 7's reflection.
+
+This is the cleanest articulation of what I would refactor first if I revisited Lab 7.
+
+---
+
+### 7.12 The DateServer pattern — controlling time
+
+The lecture's worked example: *how do you test that "a book is overdue"?* The naive answer is "wait 14 days", which is absurd. The lecture's pattern:
+
+1. **Refactor the time dependency out** — `LibraryApp.getDate()` no longer calls `new GregorianCalendar()`; it calls `dateServer.getDate()`.
+2. **Inject the `DateServer`** as a dependency.
+3. **In tests, replace the real `DateServer` with a mock** that returns whatever date the test needs.
+
+This is the same principle as *Dependency Inversion* (Lecture 5) applied to *time*. The natural way to write the code (call `new Calendar()`) is the untestable way. The testable form requires a level of indirection. Lab 7's mocking of `DrawingView` is the same pattern — replace a hard-to-control dependency (real Swing view) with a controlled stand-in.
+
+---
+
+### 7.13 Acceptance tests
+
+The lecture closes with **acceptance testing** as the highest-level kind of test:
+
+- *Defined by / with the user, based on requirements.*
+- *Traditional:* manual, after delivery, by the customer.
+- *Agile:* automatic, *before* the user story is implemented, in JUnit / Fit / JGiven.
+
+The lecture's *Login Admin* use case (Name / Actor / Precondition / Main scenario / Alternative scenarios / Postcondition) is **structurally identical** to the user stories I wrote in [Lab 9](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup). The format is the same; only the vocabulary changes (BDD calls it Given-When-Then; XP calls it Main-Alternative-Scenario). This is reassuring — Lab 9's deliverable is the *acceptance-test* layer Lecture 7 is pointing at.
+
+---
+
+### Reflection on Lecture 7 — what changes after seeing the lecture late
+
+**(1) The lecture validates Lab 7's structure without requiring any rework.** Every concept the lecture introduces is either something I applied implicitly (unit tests, white-box, mocks, AAA-style assertions in setup/act/assert form) or something I now recognise as a *named pattern* (the DateServer pattern for controlling time, the mock-vs-stub-vs-spy distinction). Receiving the lecture late was inconvenient in the moment but turned out useful for the reflection: I can audit my own work against the lecture's checklist with hindsight rather than guess.
+
+**(2) The single best operational lesson is the "what is going on?" tree.** Future me will reach for this every time a test fails. *Is the bug in the SUT? In the test? In the spec? In the libraries?* — five seconds of diagnostic discipline saves twenty minutes of chasing the wrong layer. The Mars Climate Orbiter is the kind of memorable failure that anchors the rule.
+
+**(3) The fragile-test taxonomy gave me language for a real risk I had not noticed.** The locale-sensitivity in `Labels.properties` is dormant in my Lab 7 suite but real. I now know what to call it. *Context sensitivity* is the silent failure mode of legacy tests: nobody changes the code; the OS or locale changes and the tests start lying.
+
+**(4) Mock-vs-Stub-vs-Spy maps onto a concrete refactor.** The Lab 7 `getClass()` mockability tax has, in retrospect, the cleanest fix: replace one of my Mockito `mock()` calls with a `spy()` on a real `GroupFigure`. The spy preserves the real `getClass()` answer while letting me stub `clone()`. This is a one-line change that would simplify two existing tests. *Spy is the missing tool from my Lab 7 vocabulary.*
+
+**(5) The acceptance-test parallel between this lecture and Lab 9 makes the course's testing arc explicit.** Lab 7 = unit tests. Lab 9 = acceptance tests via BDD. Lecture 7 = the framing that says these are not duplicates but two strata of the same pyramid. Lecture 9 = the developer-friendly framework that bridges them. Lecture 10 = the textbook's worked example of the same arc on Drawlets. **One arc, four lecture/lab anchors.**
+
+---
 
 > Lecture 8 had no slides released and no associated lab, so this section jumps from Lecture 6 / Lab 7 straight to Lecture 9.
 
@@ -3502,3 +3745,161 @@ The course is therefore not a sequence of independent topics but **one argument 
 The order in that list is my guess at the **principal × interest** ranking — `AbstractCompositeFigure` has the most static complexity but probably changes rarely; `DefaultDrawingView` is huge *and* gets touched a lot; `AbstractSelectedAction` is small but touched on every action change. Without the tool I cannot verify; with the tool I would know in five minutes which to refactor first.
 
 **(3) The course as a whole, said in one sentence.** Software maintenance is the activity of **making safe, small, frequent changes to a moving system whose codebase outlives every individual who has worked on it.** Every lecture and every lab in this portfolio is a different angle on that one sentence. Lecture 1 named the difficulties; the middle lectures gave the workflow; Lecture 11 gives the instrument panel that tells you, on any given Monday morning, *where in the codebase to apply the workflow today*. The course has, in retrospect, taught me both the *what to do* and the *where to do it next* — and these are the two questions a working software maintainer answers every week of their career.
+
+---
+
+## Capstone Reflection — The Course as One Argument
+
+> The previous sections are the *record* of the course. This section is the *synthesis* — what I want a future version of myself, opening this PDF in two years, to come away with after a single read. It is deliberately personal, and deliberately short relative to the size of the document above.
+
+---
+
+### The shape of the journey
+
+Over a single semester I performed, on one open-source codebase, a complete pass through Rajlich's phased software-change model:
+
+1. **Lab 1** — set up the environment and read the codebase.
+2. **Lab 2** — selected the *Group / Ungroup* feature and located its concepts.
+3. **Lab 3** — built impact-analysis tables and a GitHub-Actions CI workflow.
+4. **Lab 4** — prefactored `GroupAction` (Compose Method, dead-code removal).
+5. **Lab 5** — re-read the same change through SOLID / Clean Architecture.
+6. **Lab 7** — pinned the feature with 24 JUnit 4 unit tests + 6 production assertions.
+7. **Lab 9** — added 4 JGiven BDD scenarios that describe the same feature in user-story English.
+
+Each lab compiled, each commit passed CI, each step left the codebase fractionally better than it found it. **The deliverable was not nine isolated artefacts but one trajectory of cleanup applied to a single 8-year-old feature.**
+
+---
+
+### Five lessons I will keep
+
+**(1) The phase model is not a textbook decoration — it is a working schedule.**
+When Rajlich draws Initiation → Concept Location → Impact Analysis → Prefactoring → Actualization → Postfactoring → Conclusion, he is not describing the past. He is describing the seven things that happen *every time anything changes in a codebase*, regardless of whether the engineer running them notices. Doing the labs in this order made me notice. The thing I will take into my next job is not the labels but the *rhythm*: locate before changing, analyse impact before editing, refactor before adding, test before committing.
+
+**(2) Tests are an asset, not a deliverable.**
+Lab 7's 24 unit tests are the *only* part of this portfolio that survives if I delete every other artefact. The portfolio explains *why* the change was made; the tests prove it *is* made and *stays* made. The 1.4 test-line-per-production-line ratio Rajlich reports (Lecture 10) is a description of the steady-state cost of running software, not a heroic investment.
+
+**(3) The work I will be paid for is mostly the work I cannot see in advance.**
+Every lab had a moment where the plan and the code disagreed. Lab 2's concept location backtracked at least twice. Lab 4's deferred refactorings were the most honest decision of the semester. Lab 7's JGiven JDK-25 incompatibility forced a Surefire `argLine` workaround. Lab 9's `getClass()` mockability tax was an unexpected, small but real piece of design feedback. **The textbook describes the path; the project provides the surprises**. Becoming better at this work is becoming better at the surprises.
+
+**(4) Reading the code is a first-class skill.**
+JHotDraw is a hundred-class fork of a fork of a 1990s Smalltalk framework. The first useful thing I did in every lab was read the existing code. The second was draw a diagram of what I had just read. The third was check `git log`. Every prefactoring, every refactoring, every test depended on those three reads. *Reading the code is not preparation for the work; reading the code is the work.*
+
+**(5) The right size of a unit of work is a single coherent narrative.**
+Every commit in this portfolio is one paragraph long in its commit message, contains changes to a small number of files, and corresponds to one row of the TOC. When I revisit this branch in two years, I want to be able to read its `git log --oneline` and have it make sense as a story. The discipline of keeping commits at that size is what makes the portfolio readable as a document. It is also what will make the codebase maintainable for the next person.
+
+---
+
+### What I would do differently if I started again
+
+- **Do Lab 9 before Lab 7.** The BDD scenarios capture the *contract* the feature is supposed to uphold. The unit tests capture the *implementation* of that contract. Starting from the contract and refining inward would have produced better-named JUnit tests — `groupingTwoFiguresProducesOneGroupOfTwo` rather than `groupFigures_clearsSelection_addsGroupAtFirstFigureIndex_andReselectsTheGroup`.
+- **Run the *splitting roles* refactor on `GroupAction.canUngroup`.** Three lectures (4, 6, 10) converge on this one-line change. I deferred it in Lab 4 because no tests existed; after Labs 7 and 9, the safety net is in place. It would be the right *next* commit on this branch.
+- **Use Mockito's `spy()` instead of `mock()` for the `GroupFigure` prototype.** The current Lab 7 test file uses real `GroupFigure` instances where class identity matters and mocks where it doesn't. A spy would unify both cases.
+- **Set up CodeScene against this repository.** Lecture 11 makes the case; my labs all gave intuitive guesses at the hotspots. Running the tool would either confirm those guesses or surface a different priority list. Either outcome is useful.
+
+None of these are blockers. They are the natural *next labs*, in the same trajectory the existing seven labs trace.
+
+---
+
+### How this portfolio will be useful to me beyond the exam
+
+Three concrete future moments where I expect to reach for this document:
+
+- **The first time I onboard onto a legacy codebase at work.** The Lecture-2 concept-location and Lab-2 selection process is the procedure I will follow on day one of any new repository.
+- **The first code review I do where the diff is uncomfortable.** The Lecture-4 prefactoring discipline ("clean the code *before* you change it, not after") and the Lecture-6 *Boy Scout Rule* are the two principles I will apply to my own reviews.
+- **The first time I am asked to estimate a feature.** The Rajlich phase diagram, with the Verification spine running the full length of the V, is the cost model I will use to push back on estimates that ignore the right-hand side of the V.
+
+---
+
+### One sentence to take with me
+
+> *Software does not stand still; the engineer who maintains it does not stand still either; and the artefacts of careful maintenance — small commits, named tests, lived-in code — are the only durable record of the engineer's care.*
+
+That sentence is the course in fourteen words. The portfolio above is the proof I learned it.
+
+---
+
+## Bibliography
+
+A consolidated list of every book, paper, lecturer, library, and tool cited in the portfolio above. Items are grouped by category and ordered alphabetically within each group.
+
+### Books
+
+- **Beck, Kent.** *Extreme Programming Explained: Embrace Change*. Addison-Wesley, 1999. (Referenced as the source of the Three Laws of TDD and the JUnit framework. See [Lecture 7](#lecture-7--software-testing-how-to-make-software-fail).)
+- **Beck, Kent.** *Test-Driven Development: By Example*. Addison-Wesley, 2002. (Source of the red-green-refactor TDD cycle. See [Lecture 7](#lecture-7--software-testing-how-to-make-software-fail).)
+- **Brooks, Frederick P.** *The Mythical Man-Month*. Addison-Wesley, 1975. (Source of the four *essential difficulties* — Complexity, Invisibility, Changeability, Conformity. See [Lecture 1](#lecture-1--introduction-to-software-maintenance).)
+- **Feathers, Michael.** *Working Effectively with Legacy Code*. Prentice Hall, 2004. (Referenced via the Clean Code citation. See [Lecture 6](#lecture-6--clean-code).)
+- **Ford, Neal; Parsons, Rebecca; Kia, Patrick.** *Building Evolutionary Architectures*. O'Reilly, 2017. (Source of the technical-debt definition *"stuff that isn't supposed to be there and is in the way"* — p. 110. See [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).)
+- **Gamma, Erich; Helm, Richard; Johnson, Ralph; Vlissides, John.** *Design Patterns: Elements of Reusable Object-Oriented Software*. Addison-Wesley, 1994. (The "Gang of Four". Cited as the design heritage of JHotDraw and JUnit. See [Lecture 4](#lecture-4--refactoring-and-refactoring-to-patterns), [Lecture 7](#lecture-7--software-testing-how-to-make-software-fail).)
+- **Fowler, Martin.** *Refactoring: Improving the Design of Existing Code*. Addison-Wesley, 1999. (Source of *Compose Method*, *Replace Conditional with Polymorphism*, and most of the refactoring vocabulary used in [Lab 4](#lab-4--refactoring-lab-group--ungroup-prefactoring).)
+- **Martin, Robert C.** *Clean Code: A Handbook of Agile Software Craftsmanship*. Prentice Hall, 2009. (The structural source for [Lecture 6](#lecture-6--clean-code) — meaningful names, functions, comments, formatting, error handling, unit tests, classes, emergent design.)
+- **Martin, Robert C.** *Clean Architecture*. Prentice Hall, 2017. (Referenced for the architectural principles in [Lecture 5](#lecture-5--actualization-oo-principles-and-clean-architecture).)
+- **Rajlich, Václav.** *Software Engineering: The Current Practice*. CRC Press, 2012. (The course's primary textbook. Chapters cited: Ch. 11 on the *Conclusion* phase, Ch. 17 on the *Drawlets example*. See [Lecture 10](#lecture-10--example-of-software-change-and-conclusion-of-the-change-process).)
+- **Tornhill, Adam.** *Software Design X-Rays: Fix Technical Debt with Behavioral Code Analysis*. The Pragmatic Bookshelf, 2018. (The conceptual background for CodeScene. See [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).)
+- **Tornhill, Adam.** *Your Code as a Crime Scene*. The Pragmatic Bookshelf, 2015. (Cited via [adamtornhill.com](https://www.adamtornhill.com) — same author, earlier book on the same paradigm.)
+
+### Papers, Talks, and Articles
+
+- **Dijkstra, Edsger W.** *Notes on Structured Programming*. EWD249, 1972. (Source of the dictum *"Testing can demonstrate the presence of bugs, but not their absence."* See [Lecture 7](#lecture-7--software-testing-how-to-make-software-fail).)
+- **Graves, Todd L.; Karr, Alan F.; Marron, J.S.; Siy, Harvey.** *Predicting Fault Incidence Using Software Change History*. IEEE Transactions on Software Engineering 26(7):653–661, August 2000. (Empirical foundation for hotspot analysis. See [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).)
+- **Hickey, Rich.** *Simple Made Easy*. Strange Loop 2011 talk. (Source of the *Easy vs Simple* curve. See [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).)
+- **Lehman, Manny M.** *Programs, Life Cycles, and Laws of Software Evolution*. Proceedings of the IEEE 68(9):1060–1076, September 1980. (Source of *Lehman's Laws* — Continuing Change and Increasing Complexity. See [Lecture 1](#lecture-1--introduction-to-software-maintenance), [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).)
+- **Lientz, Bennet P.; Swanson, E. Burton.** *Software Maintenance Management*. Addison-Wesley, 1980. (Source of the Lientz-Swanson percentages — Corrective ~21%, Adaptive ~25%, Perfective ~50%, Preventive ~4%. See [Lecture 1](#lecture-1--introduction-to-software-maintenance), [Lab 1](#lab-1--introduction-lab-project-setup).)
+- **The Standish Group.** *CHAOS Report*. Various years. (Source of project success/challenged/failed percentages cited in [Lecture 1](#lecture-1--introduction-to-software-maintenance), [Lab 1](#lab-1--introduction-lab-project-setup).)
+- **Turing, Alan.** *On Computable Numbers, with an Application to the Entscheidungsproblem*. Proceedings of the London Mathematical Society, 1936. (Source of the halting problem. See [Lecture 7](#lecture-7--software-testing-how-to-make-software-fail).)
+- **Holwerda, Thom.** *WTFs/minute*. (The cartoon-form code-quality metric quoted in [Lecture 6](#lecture-6--clean-code).)
+
+### Lecturers and Course Material
+
+- **Sørensen, Jan Corfixen.** University of Southern Denmark. *SB5-MAI Software Maintenance* course materials. Author of all course lecture slides and lab handouts.
+- **Course handouts referenced:**
+  - *Lab1-Setup* — environment + first read of JHotDraw.
+  - *ChangeReqLab* / *CLLab* — Lab 2 change initiation and concept location.
+  - *ImpactAnalysisLab* / *CILab* — Lab 3 impact analysis and CI.
+  - *RefactoringLab* — Lab 4 prefactoring.
+  - *ActualizationLab* — Lab 5 SOLID and Clean Architecture.
+  - *TestLab1* — Lab 7 unit testing.
+  - *BDDLab* / *TestLab2* — Lab 9 BDD.
+
+### Tools and Libraries
+
+- **AssertJ** — fluent assertion library. [https://assertj.github.io/doc/](https://assertj.github.io/doc/) — used in [Lab 9](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup).
+- **AssertJ-Swing** — Swing GUI automation library. Used (documented, not runnable headless) in [Lab 9](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup).
+- **CodeScene** — behavioural code analysis SaaS by Adam Tornhill. [https://codescene.com](https://codescene.com) — discussed in [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).
+- **GitHub Actions** — CI runner. Used in [Lab 3](#lab-3--continuous-integration-and-impact-analysis).
+- **JGiven** — developer-friendly BDD framework. [http://jgiven.org](http://jgiven.org) — used in [Lab 9](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup).
+- **JHotDraw** — the codebase under study. Fork at v9.1-SNAPSHOT, LGPL 2.1. Origin: SourceForge JHotDraw project.
+- **JUnit 4** — unit-test framework. [https://junit.org/junit4/](https://junit.org/junit4/) — used in [Lab 7](#lab-7--testing-lab-unit-tests-for-group--ungroup).
+- **Maven 3.9.6** — portable build tool at `/tmp/maven`. [https://maven.apache.org](https://maven.apache.org).
+- **Mockito 4.11.0** — Java mocking framework. [https://site.mockito.org](https://site.mockito.org) — used in [Lab 7](#lab-7--testing-lab-unit-tests-for-group--ungroup) and [Lab 9](#lab-9--behavior-driven-testing-jgiven-scenarios-for-group--ungroup).
+- **SonarQube** — static code quality / technical debt tool. Critiqued in [Lecture 11](#lecture-11--beyond-technical-debt-behavioural-code-analysis-with-codescene).
+- **Surefire** — Maven test runner plugin.
+- **TestNG** — alternative Java test framework, pre-existing in JHotDraw.
+- **Drawlets** — the framework used in Rajlich's worked example. Original by Kent Beck and Ward Cunningham, ported to Java. [http://www.rolemodelsoft.com/aboutUs/drawlets.htm](http://www.rolemodelsoft.com/aboutUs/drawlets.htm). See [Lecture 10](#lecture-10--example-of-software-change-and-conclusion-of-the-change-process).
+
+### Acronyms
+
+| Acronym | Expansion |
+|---|---|
+| BDD | Behaviour-Driven Development |
+| CHAOS | The Standish Group's report on software project outcomes |
+| CI | Continuous Integration |
+| CLI | Command-Line Interface |
+| DI | Dependency Injection |
+| DRY | Don't Repeat Yourself |
+| F.I.R.S.T. | Fast, Independent, Repeatable, Self-validating, Timely (clean tests) |
+| GoF | Gang of Four (referring to *Design Patterns* authors) |
+| GRASP | General Responsibility Assignment Software Patterns |
+| JPMS | Java Platform Module System |
+| LGPL | GNU Lesser General Public License |
+| MoSCoW | Must / Should / Could / Won't (requirements prioritisation) |
+| OCP | Open / Closed Principle |
+| ROI | Return on Investment |
+| SDI / MDI | Single / Multiple Document Interface |
+| SOLID | Single-responsibility, Open-closed, Liskov, Interface-segregation, Dependency-inversion |
+| SRP | Single Responsibility Principle |
+| SUT | System / Software Under Test |
+| TDD | Test-Driven Development |
+| TOC | Table of Contents |
+| US-1, US-2, US-3 | User Stories 1, 2, 3 (Group / Ungroup) |
+| WTFs/minute | Subjective code-readability metric (Holwerda) |
+| XP | eXtreme Programming |
