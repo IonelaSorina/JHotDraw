@@ -1,6 +1,6 @@
 # SB5-MAI Software Maintenance — Individual Portfolio
 
-**Student:** Alex Baduca (baducualexandrudaniel@gmail.com)  
+**Student:** Alexandru Daniel Baducu (albad23@student.sdu.dk)  
 **Course:** SB5-MAI Software Maintenance, University of Southern Denmark  
 **Project:** JHotDraw — open-source Java drawing framework (fork, v9.1-SNAPSHOT)
 
