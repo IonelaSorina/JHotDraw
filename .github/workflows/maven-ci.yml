@@ -27,5 +27,5 @@ jobs:
       - name: Build and run tests
         env:
           GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_PACKAGES_TOKEN }}
         run: mvn -B -U -s .maven-settings.xml clean verify
