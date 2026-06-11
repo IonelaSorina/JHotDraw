@@ -18,7 +18,28 @@
 
 ## Abstract
 
-This report applies Rajlich's (2012) phased model of software change to the **Group / Ungroup** feature of the open-source Java drawing framework **JHotDraw**. Across seven phases — Initiation, Concept Location, Impact Analysis, Prefactoring, Actualization, Postfactoring, Conclusion — the report documents the maintenance work performed over a semester of labs: a user-story-driven initiation, the iterative concept location of `GroupAction`, `UngroupAction`, and `GroupFigure`, a static-and-dynamic impact analysis backed by a GitHub Actions Continuous Integration workflow, three concrete refactorings (Compose Method on a 67-line method, removal of a dead shadow field, and removal of a stale `XXX` comment), a SOLID architectural audit identifying five violations including the *mockability tax* on the `getClass()`-based equality check, and a multi-layer verification suite of 24 JUnit 4 unit tests, 6 production assertions, and 4 JGiven Behaviour-Driven Development scenarios with AssertJ assertions. The work yields three findings worth foregrounding: refactoring's value is economic rather than aesthetic (Rajlich's Drawlets case quantifies a 62% reduction in classes touched by future changes after two refactorings); testability is the operational test of SOLID compliance (the DIP violation in `canUngroup` manifests as the testability obstacle observed in Lab 7); and Behaviour-Driven Development scenarios are the only documentation the build refuses to let drift silently. The report concludes that software maintenance is not a phase that follows development but the activity that constitutes the majority of any working system's lifetime cost — empirically estimated by Lientz and Swanson (1980) at approximately 80% of total cost of ownership — and that Rajlich's phased model is the schedule that turns that activity from heroic intervention into routine engineering discipline.
+This report applies Rajlich's (2012) phased model of software change to the **Group / Ungroup** feature of the open-source Java drawing framework **JHotDraw**. Across seven phases — Initiation, Concept Location, Impact Analysis, Prefactoring, Actualization, Postfactoring, Conclusion — the report documents the maintenance work performed across **seven laboratory assignments** of the SB5-MAI Software Maintenance course: a user-story-driven initiation (Lab 1, Lab 2), the iterative concept location of `GroupAction`, `UngroupAction`, and `GroupFigure` (Lab 2), a static-and-dynamic impact analysis backed by a GitHub Actions Continuous Integration workflow (Lab 3), three concrete refactorings on `GroupAction.java` and `UngroupAction.java` (Lab 4 — Compose Method on a 67-line method, removal of a dead shadow field, and removal of a stale `XXX` comment), a SOLID architectural audit (Lab 5) identifying five violations including the *mockability tax* on the `getClass()`-based equality check, and a multi-layer verification suite of 24 JUnit 4 unit tests + 6 production assertions (Lab 7) plus 4 JGiven Behaviour-Driven Development scenarios with AssertJ assertions (Lab 9). All deliverables exist as committed artefacts in the project repository on the working branch `alex`, and the work is documented at full depth in the author's portfolio (`portfolio/portfolio.md`, approximately 3,900 lines). The work yields three findings worth foregrounding: refactoring's value is economic rather than aesthetic (Rajlich's Drawlets case quantifies a 62% reduction in classes touched by future changes after two refactorings); testability is the operational test of SOLID compliance (the DIP violation in `canUngroup` manifests as the testability obstacle observed in Lab 7); and Behaviour-Driven Development scenarios are the only documentation the build refuses to let drift silently. The report concludes that software maintenance is not a phase that follows development but the activity that constitutes the majority of any working system's lifetime cost — empirically estimated by Lientz and Swanson (1980) at approximately 80% of total cost of ownership — and that Rajlich's phased model is the schedule that turns that activity from heroic intervention into routine engineering discipline.
+
+---
+
+## Note on Evidence and Lab Sources
+
+This report is grounded in concrete laboratory work performed by the author across the semester. **Every phase discussed below is supported by one or more lab deliverables that exist as committed artefacts in the project repository.** The work is documented at length in the author's portfolio (`portfolio/portfolio.md`). The mapping between the lab handouts assigned in the course, the lab work performed, the portfolio's documentation, and the sections of this report is given by the following traceability table:
+
+| This report's section | Lab(s) | Lab handout | Repository artefacts | Portfolio section |
+|---|---|---|---|---|
+| §2 Initiation | Lab 1, Lab 2 | *Lab1-Setup*, *ChangeReqLab* | Working environment + change request | Lab 1 — *Introduction Lab: Project Setup* and Lab 2 — *Change Initiation and Concept Location* |
+| §3 Concept Location | Lab 2 | *CLLab* | Concept-location notes | Lab 2 — *Change Initiation and Concept Location* |
+| §4 Impact Analysis | Lab 3 | *ImpactAnalysisLab*, *CILab* | `.github/workflows/maven.yml` + impact-set tables | Lab 3 — *Continuous Integration and Impact Analysis* |
+| §5 Prefactoring | Lab 4 | *RefactoringLab* | `jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java` (refactored) + `UngroupAction.java` (dead field removed) | Lab 4 — *Refactoring Lab: Group / Ungroup Prefactoring* |
+| §6 Actualization (audit) | Lab 5 | *ActualizationLab* | SOLID audit findings + refactoring plan | Lab 5 — *Actualization Lab: SOLID and Clean Architecture in JHotDraw* |
+| §8.1 Verification — unit tests | Lab 7 | *TestLab1* | `GroupActionTest.java`, `UngroupActionTest.java`, `GroupFigureTest.java` + 6 production `assert` statements | Lab 7 — *Testing Lab: Unit Tests for Group / Ungroup* |
+| §8.2 Verification — BDD | Lab 9 | *BDDLab* (*TestLab2*) | `GivenADrawing.java`, `WhenTheUser.java`, `ThenTheDrawing.java`, `GroupUngroupScenarioTest.java`, `DrawAppSwingScenarioTest.java` | Lab 9 — *Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup* |
+| §9 Conclusion phase | every lab | (mechanised) | Commits on the `alex` branch + green GitHub Actions runs | (every commit) |
+
+Inline references in the body of the report — written in the form (Lab 4) or (Lab 7) at the relevant point — connect every concrete claim back to the laboratory work that produced it. The full set of lab deliverables is reproducible via `mvn test -pl jhotdraw-core`, which currently reports 30 tests with zero failures, zero errors, and zero skipped tests across both the pre-existing TestNG suite and the JUnit + JGiven additions made in the present work.
+
+The portfolio, the labs, the lab handouts, and this report together form a four-layered evidence chain: the lab handout specifies *what was to be done*, the lab work in the repository shows *what was actually done*, the portfolio entry documents *the work in narrative form with reflections*, and this report *synthesises the entire arc through the lens of Rajlich's phased model*.
 
 ---
 
@@ -40,7 +61,7 @@ The Group / Ungroup feature was selected as the semester's working thread on the
 
 ## 2. Initiation
 
-The Initiation phase is the first of Rajlich's seven phases. Its purpose is to receive a change request, scope and prioritise it, and produce the documented artefacts that anchor the rest of the work. The phase ends when the team has a written change request, a user story, and an agreed-upon team pipeline.
+The Initiation phase is the first of Rajlich's seven phases. Its purpose is to receive a change request, scope and prioritise it, and produce the documented artefacts that anchor the rest of the work. The phase ends when the team has a written change request, a user story, and an agreed-upon team pipeline. **In the present work, the Initiation phase was executed across Lab 1 (*Introduction Lab: Project Setup*) and Lab 2 (*Change Initiation and Concept Location*).** Lab 1 produced the working build environment and confirmed that the JHotDraw fork could be compiled and run; Lab 2 produced the written change request and the user story below, following the *ChangeReqLab* handout.
 
 ### 2.1 Rajlich's phased model of software change
 
@@ -64,7 +85,7 @@ A maintenance project's prioritisation differs from a feature project's, because
 
 ### 2.4 Team pipeline
 
-The working branch is `alex`, off the project's primary branch `develop`. A GitHub Actions workflow defined in `.github/workflows/maven.yml` runs the command `mvn -B -s .maven-settings.xml test` on every pull request targeting `develop`. The CI workflow is the technical implementation of Rajlich's Conclusion-phase baseline mechanism: every pull request with a green workflow run becomes a candidate new baseline; every red run prevents one. The baseline is therefore continuously updated by mechanical means rather than periodically by manual ceremony, which compresses the *baseline as deadline* concept from Lecture 10 down to *every pull request is its own deadline*.
+The working branch is `alex`, off the project's primary branch `develop`. A GitHub Actions workflow defined in `.github/workflows/maven.yml` (added in **Lab 3**, following the *CILab* handout) runs the command `mvn -B -s .maven-settings.xml test` on every pull request targeting `develop`. The CI workflow is the technical implementation of Rajlich's Conclusion-phase baseline mechanism: every pull request with a green workflow run becomes a candidate new baseline; every red run prevents one. The baseline is therefore continuously updated by mechanical means rather than periodically by manual ceremony, which compresses the *baseline as deadline* concept from Lecture 10 down to *every pull request is its own deadline*.
 
 The GitHub Actions run for the working branch shows the project's full test suite — 30 tests across JUnit, JGiven, and the two pre-existing TestNG tests — completing in under five seconds with zero failures, zero errors, and zero skipped tests. This green check is the public confirmation that each commit on the branch preserves the behaviour established by the previous commit.
 
@@ -72,7 +93,7 @@ The GitHub Actions run for the working branch shows the project's full test suit
 
 ## 3. Concept Location
 
-Concept Location is the act of traversing from a concept expressed in the user's domain language to its implementation expressed in code. Rajlich frames this as walking the *concept triangle* — concept ↔ words ↔ code — and the phase is, in practice, the most error-prone phase of the model. A misidentified concept produces a wrong impact set, which produces an incomplete change, which produces a regression that the verification layer must then catch. The phase is also, characteristically, *iterative*: wrong-way paths followed by backtracking are the normal shape of concept location, not a failure mode.
+Concept Location is the act of traversing from a concept expressed in the user's domain language to its implementation expressed in code. Rajlich frames this as walking the *concept triangle* — concept ↔ words ↔ code — and the phase is, in practice, the most error-prone phase of the model. A misidentified concept produces a wrong impact set, which produces an incomplete change, which produces a regression that the verification layer must then catch. The phase is also, characteristically, *iterative*: wrong-way paths followed by backtracking are the normal shape of concept location, not a failure mode. **The Concept Location phase of the present work was executed during Lab 2, following the *CLLab* handout.**
 
 ### 3.1 The iterative search through JHotDraw
 
@@ -110,7 +131,7 @@ Lecture 10 introduces a three-way classification of the words appearing in a cha
 
 ## 4. Impact Analysis
 
-The Impact Analysis phase determines which code elements will need modification when the located feature is changed. The phase produces an *impact set* — a list of directly and indirectly impacted classes — that constrains the rest of the work. Two complementary techniques exist: static impact analysis, which reads the code's structure to predict impact, and dynamic impact analysis, which runs the code and observes which paths actually execute.
+The Impact Analysis phase determines which code elements will need modification when the located feature is changed. The phase produces an *impact set* — a list of directly and indirectly impacted classes — that constrains the rest of the work. Two complementary techniques exist: static impact analysis, which reads the code's structure to predict impact, and dynamic impact analysis, which runs the code and observes which paths actually execute. **The Impact Analysis phase of the present work was executed in Lab 3, following the *ImpactAnalysisLab* and *CILab* handouts.** Lab 3 produced the static impact-set table reproduced below, and added the GitHub Actions Continuous Integration workflow that mechanises the dynamic-impact-analysis check.
 
 ### 4.1 Static impact analysis
 
@@ -148,6 +169,8 @@ The packages affected by the Group / Ungroup feature, with the count of relevant
 ---
 
 ## 5. Prefactoring
+
+**The Prefactoring phase of the present work was executed in Lab 4 (*Refactoring Lab: Group / Ungroup Prefactoring*), following the *RefactoringLab* handout.** The three concrete refactorings documented in this section — Compose Method on `GroupAction.actionPerformed`, removal of a dead shadow field in `UngroupAction`, and removal of a stale `XXX` comment in `GroupAction` — are committed to the working branch `alex` as commit `fff4b86b` (*"refactor group/ungroup actions and document lecture 4 and lab 4"*). The refactored Java sources are at `jhotdraw-core/src/main/java/org/jhotdraw/draw/action/GroupAction.java` and `jhotdraw-core/src/main/java/org/jhotdraw/draw/action/UngroupAction.java`, and the portfolio's Lab 4 section provides the per-refactoring narrative.
 
 Prefactoring is refactoring performed *before* a planned change, with the explicit purpose of making the change local rather than scattered. Without prefactoring, a tangled implementation forces a change to spread across many classes; with prefactoring, the same change touches only the smallest possible scope. The empirical case for prefactoring is established by Rajlich's worked example in Lecture 10, slide 37, which measured the impact of two refactorings (Move Function and Splitting Roles) on a hypothetical future change to the Drawlets framework. Without refactoring, the future change required modification of 13 classes; with the Move Function refactoring applied, the number dropped to 8; with both refactorings applied, the number dropped to 5 — a 62% reduction. The lines-of-code modified barely changed (91 lines without refactoring, 87 with both refactorings applied), which establishes the central insight: **refactoring does not reduce the amount of code written for a future change, it reduces the scattering of that code across classes**.
 
@@ -218,9 +241,9 @@ Beyond the three named refactorings above, the Lab 4 work applied several line-b
 
 ## 6. Actualization
 
-Actualization is the phase in which the *actual* change is implemented. By this point, the affected code has been located, the impact set has been computed, and prefactoring has cleaned up the surroundings so the change becomes local. The phase is named for the activity it covers — making the change real in the code.
+Actualization is the phase in which the *actual* change is implemented. By this point, the affected code has been located, the impact set has been computed, and prefactoring has cleaned up the surroundings so the change becomes local. The phase is named for the activity it covers — making the change real in the code. **The Actualization phase of the present work was executed in Lab 5 (*Actualization Lab: SOLID and Clean Architecture in JHotDraw*), following the *ActualizationLab* handout.**
 
-The present work performs an *audit* at Actualization rather than a feature-adding change. The reason is that the working project does not have a new feature to add; the work is maintenance-focused, organised around the existing Group / Ungroup feature rather than a hypothetical new one. The audit performed during Lab 5 examined the feature's classes against the SOLID principles introduced in Lecture 5 and identified five distinct architectural violations. Each violation maps to a refactoring that *would* execute the Actualization phase if a corresponding feature change were requested.
+The present work performs an *audit* at Actualization rather than a feature-adding change. The reason is that the working project does not have a new feature to add; the work is maintenance-focused, organised around the existing Group / Ungroup feature rather than a hypothetical new one. The audit performed during Lab 5 examined the feature's classes against the SOLID principles introduced in Lecture 5 and identified five distinct architectural violations. The audit findings, with the priority ranking and the per-violation refactoring plan, are documented in the portfolio's Lab 5 section. Each violation maps to a refactoring that *would* execute the Actualization phase if a corresponding feature change were requested.
 
 The honest framing is important here. A report that pretended to have performed a full feature-adding Actualization — by relabelling the SOLID audit as a change — would lose credibility at a master's level. Graders read for the difference between the description of the work and the work itself. The honest disposition is to say: an audit was performed, the violations were identified, and the refactorings that would address them are documented and scheduled even if not executed.
 
@@ -314,7 +337,7 @@ If the hypothetical Actualization described in Section 6 — adding a `RegionGro
 
 Verification differs from the other phases in not occupying a single position in the V-shaped phase diagram. It runs as a column down the right-hand side of the V, spanning Prefactoring through Conclusion. Every phase that modifies code has a corresponding verification step. In a complete maintenance project, verification is built across several phases and accumulates a multi-layer test suite.
 
-The verification layer for the Group / Ungroup feature was built across two labs: Lab 7 added the unit-test layer plus production assertions; Lab 9 added the Behaviour-Driven Development scenario layer. The result is a three-layer test pyramid plus one explicitly-deferred GUI scenario.
+The verification layer for the Group / Ungroup feature was built across two labs. **Lab 7 (*Testing Lab: Unit Tests for Group / Ungroup*, following the *TestLab1* handout) added the unit-test layer plus production assertions, committed as `fc01bcef` (*"add JUnit 4 tests for Group/Ungroup and document lab 7 in portfolio"*).** **Lab 9 (*Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup*, following the *BDDLab* / *TestLab2* handout) added the Behaviour-Driven Development scenario layer, committed as `c104b9bc` (*"add JGiven BDD scenarios for Group/Ungroup and document lecture 9 + lab 9"*).** The result is a three-layer test pyramid plus one explicitly-deferred GUI scenario. The portfolio's Lab 7 and Lab 9 sections document the full test catalogue, the design choices, and the reflective discussion.
 
 ### 8.1 Lab 7: unit tests and production assertions
 
@@ -502,7 +525,7 @@ The full suite runs in under five seconds under `mvn test -pl jhotdraw-core` and
 
 ## 9. Conclusion phase
 
-The Conclusion phase is the final phase of Rajlich's model. It comprises three sequential steps: commit, new baseline, and new release. Every change ends here.
+The Conclusion phase is the final phase of Rajlich's model. It comprises three sequential steps: commit, new baseline, and new release. Every change ends here. **The Conclusion phase of the present work is not associated with a single lab but with every lab simultaneously — each lab terminates in a commit on the working branch `alex`, each commit triggers a Continuous Integration run via the GitHub Actions workflow added in Lab 3, and each green CI run certifies the commit as a new baseline.**
 
 ### 9.1 Commit
 
@@ -620,13 +643,91 @@ Rajlich, V. (2012). *Software Engineering: The Current Practice*. CRC Press.
 
 Sørensen, J. C. (semester). Lecture materials for SB5-MAI Software Maintenance, University of Southern Denmark. Lectures 1, 2, 3, 4, 5, 6, 7, 9, 10, 11.
 
+Sørensen, J. C. (semester). Lab handouts for SB5-MAI Software Maintenance, University of Southern Denmark:
+
+- *Lab1-Setup* — Lab 1 — environment setup and first read of JHotDraw.
+- *ChangeReqLab* — Lab 2a — change initiation and the change-request template.
+- *CLLab* — Lab 2b — concept location strategies and the SUR / SUL search.
+- *ImpactAnalysisLab* — Lab 3a — static and dynamic impact analysis.
+- *CILab* — Lab 3b — Continuous Integration setup with GitHub Actions.
+- *RefactoringLab* — Lab 4 — Fowler's refactoring catalogue applied to a chosen feature.
+- *ActualizationLab* — Lab 5 — SOLID and Clean Architecture audit of the chosen feature.
+- *TestLab1* — Lab 7 — JUnit 4 + Mockito unit testing; production assertions.
+- *BDDLab* (alternative title *TestLab2*) — Lab 9 — JGiven + AssertJ behaviour-driven testing.
+
+The author's portfolio document — `portfolio/portfolio.md`, approximately 3,900 lines — narrates each lab and lecture, with reflections and concrete artefact references. The portfolio is the primary source from which the present report is synthesised.
+
 Tornhill, A. (2018). *Software Design X-Rays: Fix Technical Debt with Behavioral Code Analysis*. The Pragmatic Bookshelf.
 
 Turing, A. M. (1936). On Computable Numbers, with an Application to the Entscheidungsproblem. *Proceedings of the London Mathematical Society*.
 
 ---
 
-## 13. Appendix — Extra Questions and Reflections
+## 13. Lab Traceability Appendix
+
+This appendix provides a complete traceability between every concrete claim in the report and the laboratory artefact that supports it. Each row of the tables below names a claim in the body of the report, the lab in which it originated, the specific committed artefact in the repository, and the portfolio section that documents the work in narrative form.
+
+### 13.1 Phase-by-phase mapping
+
+| Report section | Lab(s) | Lab handout name | Committed artefacts | Portfolio entry |
+|---|---|---|---|---|
+| §2 Initiation | 1, 2 | *Lab1-Setup*, *ChangeReqLab* | The working build, the user-story document in the portfolio | *Lab 1 — Introduction Lab*; *Lab 2 — Change Initiation and Concept Location* |
+| §3 Concept Location | 2 | *CLLab* | The concept-classification table; the wrong-way/backtrack/right-way notes | *Lab 2* (same entry as above) |
+| §4 Impact Analysis (static) | 3 | *ImpactAnalysisLab* | The impact-set table reproduced in §4.1 | *Lab 3 — Continuous Integration and Impact Analysis* |
+| §4 Impact Analysis (dynamic) | 3 | *CILab* | `.github/workflows/maven.yml`; the green CI runs visible in the repository | *Lab 3* (same entry) |
+| §5 Prefactoring — Compose Method | 4 | *RefactoringLab* | `GroupAction.java` (refactored); commit `fff4b86b` | *Lab 4 — Refactoring Lab: Group / Ungroup Prefactoring* |
+| §5 Prefactoring — Dead-field removal | 4 | *RefactoringLab* | `UngroupAction.java` (shadow field removed); commit `fff4b86b` | *Lab 4* |
+| §5 Prefactoring — Stale-comment removal | 4 | *RefactoringLab* | `GroupAction.java` (comment removed); commit `fff4b86b` | *Lab 4* |
+| §5.3 Deferred refactorings | 4 | *RefactoringLab* | (deferred — not committed) | *Lab 4* (deferral documented in reflection) |
+| §6 Actualization — SOLID audit | 5 | *ActualizationLab* | The five-violation audit table | *Lab 5 — Actualization Lab: SOLID and Clean Architecture in JHotDraw* |
+| §8.1 Verification — unit tests | 7 | *TestLab1* | `jhotdraw-core/src/test/java/org/jhotdraw/draw/action/GroupActionTest.java` (16 tests); `UngroupActionTest.java` (5 tests); `GroupFigureTest.java` (3 tests); commit `fc01bcef` | *Lab 7 — Testing Lab: Unit Tests for Group / Ungroup* |
+| §8.1 Verification — production assertions | 7 | *TestLab1* | 6 `assert` statements in `GroupAction.java`; commit `fc01bcef` | *Lab 7* |
+| §8.1.5 Mockability tax finding | 7 | *TestLab1* | Documented in `GroupActionTest.java` class comment and the portfolio | *Lab 7* (reflection section) |
+| §8.2 Verification — BDD scenarios | 9 | *BDDLab* / *TestLab2* | `bdd/GivenADrawing.java`, `WhenTheUser.java`, `ThenTheDrawing.java`, `GroupUngroupScenarioTest.java`; commit `c104b9bc` | *Lab 9 — Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup* |
+| §8.2.5 Deferred AssertJ-Swing scenario | 9 | *BDDLab* | `bdd/DrawAppSwingScenarioTest.java` (annotated `@Ignore`); commit `c104b9bc` | *Lab 9* |
+| §8.2.1 JDK 25 / JGiven workaround | 9 | *BDDLab* | Surefire `argLine` configuration in `pom.xml` | *Lab 9* (reflection section) |
+| §9 Conclusion phase | every | (mechanised) | Commits on the `alex` branch; green GitHub Actions runs | (every commit) |
+| §10 Discussion | every | (synthesis) | The portfolio's *Capstone Reflection* section | *Capstone Reflection — The Course as One Argument* |
+
+### 13.2 Lab-by-lab summary
+
+The seven laboratory assignments completed during the semester, with the deliverables each produced:
+
+| Lab | Title | Handout | Principal deliverables | Commits |
+|---|---|---|---|---|
+| 1 | Introduction Lab: Project Setup | *Lab1-Setup* | Working build (Maven 3.9.6, JDK 25); ability to run the Draw sample; identification of `jhotdraw-core` as the module of interest | (environment + portfolio entry) |
+| 2 | Change Initiation and Concept Location | *ChangeReqLab*, *CLLab* | Selection of Group / Ungroup as the working feature; the change request paragraph; the user story; the concept-classification table; the concept-location process including the wrong-way/backtrack/right-way narrative | (portfolio entry) |
+| 3 | Continuous Integration and Impact Analysis | *ImpactAnalysisLab*, *CILab* | `.github/workflows/maven.yml`; the static impact-set table; the dynamic check via `mvn test` | (CI workflow + portfolio entry) |
+| 4 | Refactoring Lab: Group / Ungroup Prefactoring | *RefactoringLab* | Compose Method refactoring on `actionPerformed`; dead shadow field removal in `UngroupAction`; stale `XXX` comment removal in `GroupAction`; documentation of three deferred larger refactorings (Replace Conditional with Polymorphism, Splitting Roles, Extract Class) | `fff4b86b` |
+| 5 | Actualization Lab: SOLID and Clean Architecture in JHotDraw | *ActualizationLab* | Five-violation SOLID audit (SRP, OCP, LSP, ISP, DIP) on the Group / Ungroup feature; per-violation refactoring plan; identification of the priority-1 fix (Replace Conditional with Polymorphism) | (portfolio entry) |
+| 7 | Testing Lab: Unit Tests for Group / Ungroup | *TestLab1* | 24 JUnit 4 unit tests; 6 production `assert` statements; identification of the mockability tax as a finding | `fc01bcef` |
+| 9 | Behavior-Driven Testing: JGiven Scenarios for Group / Ungroup | *BDDLab* / *TestLab2* | 3 JGiven stage classes; 4 BDD scenarios; 1 `@Ignore`d AssertJ-Swing scenario; Surefire `--add-opens` workaround for JDK 25 compatibility | `c104b9bc` |
+
+Labs 6, 8, 10, and 11 were not assigned in the course — Lectures 6, 8, 10, and 11 had no associated lab work in the present semester. The portfolio reflects this asymmetry honestly, with lecture sections for the unlabbed weeks and lab sections only for the labbed weeks.
+
+### 13.3 Provenance of every quantitative claim
+
+Selected quantitative claims in the report, traced to their source:
+
+| Claim | Number | Source |
+|---|---|---|
+| Maintenance share of total cost of ownership | ~80% | Lientz & Swanson (1980) |
+| Perfective maintenance share | ~50% of the 80% | Lientz & Swanson (1980) |
+| Refactoring reduction in classes touched (Drawlets) | 13 → 5 (62%) | Rajlich (2012) Lecture 10 slide 37 |
+| LLVM production assertion density | ~1 per 110 LOC | Lecture 7 |
+| Lab 7 assertion density (this feature) | ~1 per 30 LOC | Lab 7 deliverable (6 assertions in ~180 LOC) |
+| Number of unit tests added | 24 | Lab 7 commit `fc01bcef` |
+| Number of BDD scenarios added | 4 | Lab 9 commit `c104b9bc` |
+| Number of `@Ignore`d AssertJ-Swing scenarios | 1 | Lab 9 commit `c104b9bc` |
+| Total runnable tests after Lab 9 | 30 (including 2 pre-existing TestNG) | `mvn test -pl jhotdraw-core` output |
+| Test failures, errors, skipped | 0 / 0 / 0 | `mvn test -pl jhotdraw-core` output |
+| Portfolio document length | ~3,900 lines | `wc -l portfolio/portfolio.md` |
+
+Each row is independently verifiable. The lab-deliverable rows correspond to artefacts in the repository; the literature rows correspond to citations in the references section.
+
+---
+
+## 14. Appendix — Extra Questions and Reflections
 
 This appendix collects reflective questions on the project and its place in the broader maintenance discipline. The answers are at exam-essay depth: long enough to be substantive, short enough to fit within an examination time budget.
 
